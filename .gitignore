@@ -25,3 +25,11 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# Generated output directories (created by benchmark/analysis scripts)
+/benchmark_results/
+/roofline_analysis/
+/full_analysis/
+profiling/ncu_reports/*.ncu-rep
+profiling/ncu_reports/*.csv
+profiling/perf_reports/*.txt
