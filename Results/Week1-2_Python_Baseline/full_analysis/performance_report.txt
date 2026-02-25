@@ -1,0 +1,40 @@
+HOLOGRAPHIC RECONSTRUCTION PERFORMANCE REPORT
+==================================================
+
+SYSTEM CONFIGURATION
+--------------------
+CPU: 13th Gen Intel(R) Core(TM) i7-13620H
+CPU Cores: 16
+Memory: 46.67 GB
+gpu_0: NVIDIA GeForce RTX 4070 Laptop GPU (8188.0 MB)
+
+PERFORMANCE SUMMARY BY MODE
+------------------------------
+
+Batch CPU:
+  Configurations tested: 100
+  Latency: 2.29 - 7599.43 ms
+  Throughput: 1.98 - 636.69 ops/s
+  Memory: 0.0 - 177.1 MB
+  Best config: [128, 128]x1 (batch=1) - 2.29 ms
+
+Batch GPU:
+  Configurations tested: 100
+  Latency: 0.92 - 374.21 ms
+  Throughput: 41.53 - 1691.27 ops/s
+  Memory: 2.2 - 2205.6 MB
+  Best config: [128, 128]x3 (batch=1) - 0.92 ms
+
+Single CPU:
+  Configurations tested: 20
+  Latency: 1.40 - 463.37 ms
+  Throughput: 2.16 - 714.22 ops/s
+  Memory: 0.0 - 67.4 MB
+  Best config: [128, 128]x1 (batch=1) - 1.40 ms
+
+Single GPU:
+  Configurations tested: 20
+  Latency: 0.60 - 23.25 ms
+  Throughput: 43.01 - 1678.28 ops/s
+  Memory: 2.1 - 833.6 MB
+  Best config: [128, 128]x1 (batch=1) - 0.60 ms

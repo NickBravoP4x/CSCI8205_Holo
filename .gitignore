@@ -1,0 +1,27 @@
+# Build artifacts
+cpp_cuda/build/
+
+# Large binary packages
+*.deb
+
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

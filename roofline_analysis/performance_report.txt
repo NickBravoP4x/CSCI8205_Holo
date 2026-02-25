@@ -1,0 +1,43 @@
+HOLOGRAPHIC RECONSTRUCTION PERFORMANCE REPORT
+==================================================
+
+SYSTEM CONFIGURATION
+--------------------
+CPU: AMD Ryzen Threadripper PRO 7975WX 32-Cores
+CPU Cores: 64
+Memory: 251.18 GB
+gpu_0: NVIDIA GeForce RTX 5090 (32607.0 MB)
+gpu_1: NVIDIA GeForce RTX 5090 (32607.0 MB)
+gpu_2: NVIDIA GeForce RTX 5090 (32607.0 MB)
+gpu_3: NVIDIA GeForce RTX 5090 (32607.0 MB)
+
+PERFORMANCE SUMMARY BY MODE
+------------------------------
+
+Batch CPU:
+  Configurations tested: 100
+  Latency: 2.99 - 3399.29 ms
+  Throughput: 4.49 - 401.62 ops/s
+  Memory: 0.0 - 108.9 MB
+  Best config: [128, 128]x1 (batch=1) - 2.99 ms
+
+Batch GPU:
+  Configurations tested: 100
+  Latency: 0.45 - 52.03 ms
+  Throughput: 295.52 - 3590.36 ops/s
+  Memory: 2.2 - 2205.6 MB
+  Best config: [128, 128]x3 (batch=1) - 0.45 ms
+
+Single CPU:
+  Configurations tested: 20
+  Latency: 2.35 - 211.69 ms
+  Throughput: 4.72 - 426.34 ops/s
+  Memory: 0.0 - 50.1 MB
+  Best config: [256, 256]x1 (batch=1) - 2.35 ms
+
+Single GPU:
+  Configurations tested: 20
+  Latency: 0.28 - 3.25 ms
+  Throughput: 307.98 - 3626.39 ops/s
+  Memory: 2.1 - 833.6 MB
+  Best config: [128, 128]x1 (batch=1) - 0.28 ms
