@@ -8,34 +8,252 @@ CSCI 8205: Design and Implementation of Multiprocessor Systems — University of
 
 This project designs, implements, and evaluates a multi-GPU pipeline architecture for real-time digital inline holography (DIH) particle reconstruction on a 1–4 GPU workstation. The pipeline consists of six computational stages: image resize, EMA enhancement, angular spectrum propagation, CNN-based particle detection, ML classification, and post-processing.
 
-## Key Components
+Three implementations of the angular spectrum propagation kernel are provided:
 
-- **C++/CUDA reconstruction** — Angular spectrum propagation using cuFFT with depth-parallel and spatial-parallel multi-GPU strategies
-- **OpenMP CPU baseline** — FFTW-based reconstruction with strong scaling from 1–32 cores on AMD Threadripper
-- **Pipeline stage grouping** — Evaluation of multiple stage-to-GPU mappings under compute-balanced and bottleneck-isolated strategies
-- **Lock-free inter-stage communication** — Cache-line-aligned SPSC ring buffers with GPU-pinned memory, benchmarked against blocking queues and CUDA stream pipelining
-- **Asynchronous autofocus subsystem** — Work-stealing queue with dedicated GPU workers for per-particle focal plane determination
+| Implementation | Backend | Location |
+|---|---|---|
+| Python (PyTorch) | torch.fft | `Scripts/holographic_reconstruction.py` |
+| CUDA C++ | cuFFT | `cpp_cuda/src/holographic_reconstruction.cu` |
+| OpenMP C++ | FFTW3f | `cpp_cuda/src/cpu_baseline.cpp` |
+
+## Hardware
+
+| Component | Spec |
+|---|---|
+| CPU | AMD Threadripper PRO 7975WX, 32 cores / 64 threads, AVX-512 |
+| RAM | 251 GB DDR5 |
+| GPU | 4× NVIDIA RTX 5090, 32 GB VRAM each, Compute 12.0 (Blackwell) |
+| CUDA | 13.1 (nvcc V13.1.115) |
 
 ## Repository Structure
 
 ```
-cpp_cuda/          C++/CUDA source and CMake build system
-Scripts/           Python scripts for analysis and visualization
-Data/              Input hologram data
-Results/           Benchmark and experiment outputs
-Ref/               Project proposal and reference documents
-benchmark_results/ Raw benchmark data
-roofline_analysis/ Roofline model plots and data
-full_analysis/     Comprehensive profiling results
+CSCI8205/
+├── cpp_cuda/                  C++/CUDA and OpenMP implementations
+│   ├── CMakeLists.txt
+│   ├── include/
+│   │   ├── holographic_reconstruction.h   CUDA reconstructor class
+│   │   └── cpu_baseline.h                 OpenMP/FFTW reconstructor class
+│   ├── src/
+│   │   ├── holographic_reconstruction.cu  5 CUDA kernels + cuFFT pipeline
+│   │   ├── cpu_baseline.cpp               FFTW + OpenMP implementation
+│   │   ├── python_wrapper.cu              pybind11 module (cuda_holographic)
+│   │   ├── benchmark_cuda.cu              Standalone CUDA benchmark (for ncu)
+│   │   └── benchmark_cpu.cpp              Standalone CPU benchmark (for perf)
+│   └── tests/
+│       └── test_reconstruction.cpp        CUDA/CPU cross-validation tests
+│
+├── Scripts/                   Python analysis and benchmarking
+│   ├── holographic_reconstruction.py      PyTorch reference implementation
+│   ├── holographic_benchmark.py           Multi-mode benchmark framework
+│   ├── roofline_analysis.py               Roofline + enhanced visualization
+│   ├── validate_cuda.py                   Python ↔ C++ cross-validation
+│   └── README_Benchmarking.md
+│
+├── profiling/                 Hardware counter profiling
+│   ├── scripts/
+│   │   ├── profile_gpu.sh                 Nsight Compute (ncu) profiling
+│   │   └── profile_cpu.sh                 perf cache + thread scaling
+│   ├── ncu_reports/                       GPU profiling output
+│   └── perf_reports/                      CPU profiling output
+│
+├── Data/                      Input hologram images
+│   └── example_image/                     5 sample hologram JPEGs
+│
+├── Results/                   Experiment outputs
+│   ├── Week1-2_Python_Baseline/           Original baseline (RTX 4070)
+│   └── Week1-2_Python_Baseline_5090/      New baseline (RTX 5090)
+│
+├── benchmark_results/         Raw benchmark JSON data
+├── roofline_analysis/         Generated plots and reports
+├── full_analysis/             Comprehensive analysis output
+└── Ref/                       Project proposal and references
 ```
 
-## Building
+## Building the C++/CUDA Code
+
+### Prerequisites
+
+- CUDA Toolkit 13.x with nvcc
+- CMake ≥ 3.18
+- GCC/G++ ≥ 13 with C++17
+- FFTW3 single-precision (`libfftw3f-dev`)
+- pybind11 (`pip install pybind11`)
+- OpenMP (bundled with GCC)
+
+### Build
 
 ```bash
 cd cpp_cuda
-mkdir build && cd build
-cmake ..
-make
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -Dpybind11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
+make -j$(nproc)
 ```
 
-Requires: CUDA Toolkit, cuFFT, CMake, a C++17 compiler. Optional: FFTW3, OpenMP.
+This produces:
+
+| Target | Description |
+|---|---|
+| `libholographic_cuda_lib.a` | CUDA static library (5 kernels + cuFFT) |
+| `libholographic_cpu_lib.a` | CPU static library (FFTW + OpenMP) |
+| `cuda_holographic.*.so` | pybind11 Python module |
+| `benchmark_cuda` | Standalone CUDA benchmark (for ncu profiling) |
+| `benchmark_cpu` | Standalone CPU benchmark (for perf profiling) |
+| `test_reconstruction` | CUDA ↔ CPU cross-validation tests |
+
+### Verify the build
+
+```bash
+# Run cross-validation tests (15 tests across 5 configurations)
+./test_reconstruction
+
+# Quick CUDA benchmark
+./benchmark_cuda --size 256 --depth 3
+
+# Quick CPU benchmark with 4 threads
+./benchmark_cpu --size 256 --depth 3 --threads 4
+
+# Verify Python module
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python3 -c "import cuda_holographic; print('OK')"
+```
+
+## Running Benchmarks
+
+### Python baseline (PyTorch)
+
+```bash
+cd Scripts
+
+# Quick run (2 sizes × 2 depths × 2 batches)
+python holographic_benchmark.py --quick
+
+# Full run (4 sizes × 5 depths × 5 batches × 4 modes = 240 configs)
+python holographic_benchmark.py --output-dir ../Results/Week1-2_Python_Baseline_5090/benchmark_results
+```
+
+### All implementations (Python + CUDA C++ + OpenMP thread sweep)
+
+```bash
+export PYTHONPATH=../cpp_cuda/build:$PYTHONPATH
+python holographic_benchmark.py
+```
+
+The benchmark framework now includes six modes:
+
+| Mode | Description |
+|---|---|
+| Single CPU | PyTorch on CPU, one hologram at a time |
+| Single GPU | PyTorch on GPU, one hologram at a time |
+| Batch CPU | PyTorch on CPU, batched |
+| Batch GPU | PyTorch on GPU, batched |
+| CUDA C++ | cuFFT implementation via pybind11 |
+| OpenMP N-threads | FFTW+OpenMP, swept over {1, 2, 4, 8, 16, 32, 64} threads |
+
+### Cross-validation (Python ↔ C++)
+
+```bash
+cd Scripts
+export PYTHONPATH=../cpp_cuda/build:$PYTHONPATH
+python validate_cuda.py
+```
+
+Tests all 20 configurations (4 image sizes × 5 depth counts). Reports per-config relative error between Python (PyTorch CPU), CUDA C++, and OpenMP C++. CUDA ↔ OpenMP agreement is < 1e-5; cross-implementation (C++ vs Python) tolerance is < 1e-2, which is expected for float32 FFT across different libraries (cuFFT/FFTW vs PyTorch).
+
+## Profiling
+
+### GPU profiling with Nsight Compute
+
+```bash
+# Full kernel profiling → ncu-rep + CSV for roofline
+bash profiling/scripts/profile_gpu.sh 512 5
+
+# View interactively
+ncu-ui profiling/ncu_reports/ncu_512x512_d5.ncu-rep
+```
+
+### CPU profiling with perf
+
+```bash
+# Cache hierarchy + thread scaling sweep
+bash profiling/scripts/profile_cpu.sh 512 5
+```
+
+### Roofline analysis and visualization
+
+```bash
+cd Scripts
+
+# Basic roofline from benchmark JSON
+python roofline_analysis.py ../benchmark_results/benchmark_results.json
+
+# With empirical ncu data overlay
+python roofline_analysis.py ../benchmark_results/benchmark_results.json \
+       --ncu-csv ../profiling/ncu_reports/ncu_512x512_d5.csv
+```
+
+Generated plots:
+
+| Plot | Description |
+|---|---|
+| `roofline_analysis.png` | CPU and GPU roofline with benchmark points |
+| `multilevel_roofline.png` | Multi-level roofline (L1/L2/L3/DRAM ceilings) with optional ncu overlay |
+| `implementation_comparison.png` | Latency bar chart + speedup: Python vs CUDA C++ vs OpenMP |
+| `thread_scaling.png` | OpenMP speedup and parallel efficiency vs thread count, Amdahl's law overlay |
+| `latency_cdfs.png` | Per-mode latency CDF with 2.5 ms (400 Hz) budget line |
+| `gpu_memory_utilization.png` | GPU VRAM usage vs problem size |
+| `scaling_analysis.png` | Image size, depth, batch scaling + memory vs performance |
+
+## Algorithm
+
+All three implementations compute Fresnel propagation via the angular spectrum method:
+
+```
+1. Pad hologram with median background
+2. Forward 2D FFT
+3. For each depth plane z_k:
+   a. Multiply spectrum by propagation filter: exp(-2πj·z_k·√(1-(λf/r)²)/λ)
+4. Batched inverse 2D FFT
+5. Phase correction: result *= exp(2πj·z_k/λ)
+6. Intensity: |result|²
+7. Min-max normalize to [0,1] with background shift scaling
+```
+
+### CUDA kernel architecture
+
+The CUDA implementation uses 5 specialized kernels plus cuFFT:
+
+1. **`pad_hologram_kernel`** — Pads input, stores as complex. Median computed via thrust::sort.
+2. **`build_propagation_filter_kernel`** — Precomputes f2_new array in DFT order (run once per image size).
+3. **`apply_propagation_and_broadcast_kernel`** — Multiplies FFT result by exp filter for all depth planes simultaneously.
+4. **`phase_correction_and_intensity_kernel`** — Phase correct, compute |result|², remove padding.
+5. **`normalize_intensity_kernel`** + **`apply_shift_scaling_kernel`** — Global min/max reduction (via thrust), normalize, clamp.
+
+The forward FFT uses a single `cufftPlan2d`. The inverse FFT uses `cufftPlanMany` to batch all depth planes in one call.
+
+## Performance (RTX 5090, 256×256, 3 planes)
+
+| Implementation | Latency | Throughput |
+|---|---|---|
+| CUDA C++ (cuFFT) | 0.22 ms | 4,584 ops/s |
+| OpenMP C++ (FFTW, 4 threads) | 2.65 ms | 377 ops/s |
+| PyTorch GPU (Single GPU) | 0.60 ms | 1,678 ops/s |
+| PyTorch CPU (Single CPU) | 1.40 ms | 714 ops/s |
+
+## Dependencies
+
+### Conda environment (`csci`)
+
+```bash
+conda activate csci
+pip install numpy torch matplotlib seaborn tqdm psutil GPUtil pybind11
+```
+
+### System packages
+
+```bash
+sudo apt install libfftw3-dev cmake g++
+```
+
+CUDA Toolkit: install from NVIDIA (13.x required for sm_120 / Blackwell).

@@ -8,11 +8,13 @@ Part of the CSCI 8205 Multi-GPU Pipeline Architecture project.
 
 import os
 import sys
+import csv
+import re
 import numpy as np
 import json
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 # Handle display backend issues - fallback from Wayland to X11
 def setup_display_backend():
@@ -279,31 +281,6 @@ class RooflineAnalyzer:
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-    def generate_performance_report(self, output_dir: str):
-        """Generate comprehensive performance report."""
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        # Create roofline plot
-        roofline_fig = self.create_roofline_plot('both')
-        roofline_fig.savefig(output_path / 'roofline_analysis.png', dpi=300, bbox_inches='tight')
-        plt.close(roofline_fig)
-
-        # Create scaling analysis plot
-        scaling_fig = self.analyze_scaling_efficiency()
-        scaling_fig.savefig(output_path / 'scaling_analysis.png', dpi=300, bbox_inches='tight')
-        plt.close(scaling_fig)
-
-        # Generate text report
-        report_file = output_path / 'performance_report.txt'
-        with open(report_file, 'w') as f:
-            self._write_text_report(f)
-
-        print(f"Performance report generated in {output_path}")
-        print(f"  - roofline_analysis.png")
-        print(f"  - scaling_analysis.png")
-        print(f"  - performance_report.txt")
-
     def _write_text_report(self, f):
         """Write detailed text performance report."""
         f.write("HOLOGRAPHIC RECONSTRUCTION PERFORMANCE REPORT\n")
@@ -347,6 +324,489 @@ class RooflineAnalyzer:
                 f.write(f"  Best config: {best['image_size']}x{best['depth_count']} "
                        f"(batch={best['batch_size']}) - {best['mean_latency']:.2f} ms\n")
 
+    # ─── Phase 6: Nsight Compute CSV parsing ───────────────────────────────
+    def parse_ncu_csv(self, csv_path: str) -> List[Dict]:
+        """Parse Nsight Compute CSV export for per-kernel empirical roofline data."""
+        if not Path(csv_path).exists():
+            print(f"Warning: ncu CSV not found at {csv_path}")
+            return []
+
+        kernels = []
+        with open(csv_path, 'r') as f:
+            # Skip lines until we find the header
+            reader = csv.reader(f)
+            header = None
+            for row in reader:
+                if row and 'Kernel Name' in row[0] if row else False:
+                    header = row
+                    break
+                if row and len(row) > 5:
+                    # Try to detect header
+                    if any('Kernel' in str(c) for c in row):
+                        header = row
+                        break
+
+            if header is None:
+                # Fallback: try reading as standard CSV
+                f.seek(0)
+                reader = csv.DictReader(f)
+                for row in reader:
+                    kernels.append(dict(row))
+                return kernels
+
+            for row in reader:
+                if len(row) >= len(header):
+                    entry = dict(zip(header, row))
+                    kernels.append(entry)
+
+        return kernels
+
+    def extract_ncu_roofline_points(self, ncu_data: List[Dict]) -> List[Dict]:
+        """Extract (arithmetic_intensity, achieved_flops) from ncu metrics."""
+        points = []
+        for kernel in ncu_data:
+            name = kernel.get('Kernel Name', kernel.get('kernel_name', 'unknown'))
+            # Common ncu metric names
+            flops = None
+            bytes_moved = None
+            duration_ns = None
+
+            for key, val in kernel.items():
+                key_l = key.lower().strip()
+                try:
+                    v = float(str(val).replace(',', ''))
+                except (ValueError, TypeError):
+                    continue
+
+                if 'flop_count_sp' in key_l or 'sm__sass_thread_inst_executed_op_ffma_pred_on' in key_l:
+                    flops = v
+                elif 'dram__bytes' in key_l and 'sum' in key_l:
+                    bytes_moved = v
+                elif 'gpu__time_duration' in key_l or 'duration' in key_l:
+                    duration_ns = v
+
+            if flops and bytes_moved and bytes_moved > 0:
+                ai = flops / bytes_moved
+                achieved = flops / (duration_ns * 1e-9) if duration_ns else None
+                points.append({
+                    'kernel': name,
+                    'arithmetic_intensity': ai,
+                    'achieved_flops': achieved,
+                    'flops': flops,
+                    'bytes': bytes_moved,
+                })
+
+        return points
+
+    def parse_perf_report(self, perf_path: str) -> Dict:
+        """Parse perf stat output for CPU cache/cycle metrics."""
+        if not Path(perf_path).exists():
+            return {}
+
+        metrics = {}
+        with open(perf_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Parse lines like "123,456 cache-misses"
+                m = re.match(r'([\d,]+)\s+(\S+)', line)
+                if m:
+                    val_str = m.group(1).replace(',', '')
+                    try:
+                        metrics[m.group(2)] = int(val_str)
+                    except ValueError:
+                        pass
+                # Parse IPC from "insn per cycle" line
+                m2 = re.match(r'.*#\s+([\d.]+)\s+insn per cycle', line)
+                if m2:
+                    metrics['ipc'] = float(m2.group(1))
+        return metrics
+
+    # ─── Multi-level roofline ────────────────────────────────────────────
+    def create_multilevel_roofline(self, ncu_csv_path: Optional[str] = None):
+        """Create multi-level roofline (L1/L2/L3/DRAM bandwidth ceilings)."""
+        fig, (cpu_ax, gpu_ax) = plt.subplots(1, 2, figsize=(16, 7))
+
+        oi_range = np.logspace(-2, 3, 1000)
+
+        # ─ CPU multi-level roofline ─
+        cpu_bw = {
+            'L1 (~2 TB/s)':   2000e9,
+            'L2 (~800 GB/s)':  800e9,
+            'L3 (~400 GB/s)':  400e9,
+            'DRAM (150 GB/s)': self.cpu_specs['memory_bandwidth'],
+        }
+        colors_bw = ['#ff7f0e', '#2ca02c', '#9467bd', '#1f77b4']
+        for (label, bw), c in zip(cpu_bw.items(), colors_bw):
+            cpu_ax.loglog(oi_range, bw * oi_range, '--', color=c, alpha=0.6, label=label)
+
+        cpu_ax.axhline(y=self.cpu_specs['peak_compute'], color='r', linestyle='-',
+                       linewidth=2, alpha=0.8, label=f"Peak FP32 ({self.cpu_specs['peak_compute']/1e12:.1f} TF)")
+        roofline_cpu = np.minimum(self.cpu_specs['memory_bandwidth'] * oi_range,
+                                  self.cpu_specs['peak_compute'])
+        cpu_ax.loglog(oi_range, roofline_cpu, 'k-', linewidth=2.5, label='DRAM Roofline')
+
+        # Plot benchmark data points
+        cpu_results = [r for r in self.results if 'CPU' in r['mode'] or 'OpenMP' in r['mode']]
+        self._scatter_on_roofline(cpu_ax, cpu_results)
+
+        cpu_ax.set_xlabel('Arithmetic Intensity (FLOPS/byte)')
+        cpu_ax.set_ylabel('Performance (FLOPS/s)')
+        cpu_ax.set_title('CPU Multi-Level Roofline')
+        cpu_ax.legend(fontsize=8, loc='lower right')
+        cpu_ax.grid(True, alpha=0.3)
+        cpu_ax.set_ylim(1e7, 1e13)
+
+        # ─ GPU multi-level roofline ─
+        gpu_bw = {
+            'L1/Shared (~12 TB/s)': 12000e9,
+            'L2 (~6 TB/s)':         6000e9,
+            'GDDR7 (1790 GB/s)':    self.gpu_specs['memory_bandwidth'],
+        }
+        colors_gpu = ['#ff7f0e', '#2ca02c', '#1f77b4']
+        for (label, bw), c in zip(gpu_bw.items(), colors_gpu):
+            gpu_ax.loglog(oi_range, bw * oi_range, '--', color=c, alpha=0.6, label=label)
+
+        gpu_ax.axhline(y=self.gpu_specs['peak_compute'], color='r', linestyle='-',
+                       linewidth=2, alpha=0.8, label=f"Peak FP32 ({self.gpu_specs['peak_compute']/1e12:.0f} TF)")
+        roofline_gpu = np.minimum(self.gpu_specs['memory_bandwidth'] * oi_range,
+                                  self.gpu_specs['peak_compute'])
+        gpu_ax.loglog(oi_range, roofline_gpu, 'k-', linewidth=2.5, label='GDDR7 Roofline')
+
+        # Plot GPU data points
+        gpu_results = [r for r in self.results if 'GPU' in r['mode'] or 'CUDA' in r['mode']]
+        self._scatter_on_roofline(gpu_ax, gpu_results)
+
+        # Overlay ncu empirical points if available
+        if ncu_csv_path:
+            ncu_data = self.parse_ncu_csv(ncu_csv_path)
+            ncu_points = self.extract_ncu_roofline_points(ncu_data)
+            if ncu_points:
+                ais = [p['arithmetic_intensity'] for p in ncu_points if p['achieved_flops']]
+                perfs = [p['achieved_flops'] for p in ncu_points if p['achieved_flops']]
+                names = [p['kernel'] for p in ncu_points if p['achieved_flops']]
+                gpu_ax.scatter(ais, perfs, marker='*', s=200, c='gold', edgecolors='black',
+                             zorder=10, label='ncu empirical')
+                for ai, pf, nm in zip(ais, perfs, names):
+                    short = nm.split('(')[0][-25:]
+                    gpu_ax.annotate(short, (ai, pf), fontsize=6,
+                                   xytext=(5, 5), textcoords='offset points')
+
+        gpu_ax.set_xlabel('Arithmetic Intensity (FLOPS/byte)')
+        gpu_ax.set_ylabel('Performance (FLOPS/s)')
+        gpu_ax.set_title('GPU Multi-Level Roofline')
+        gpu_ax.legend(fontsize=8, loc='lower right')
+        gpu_ax.grid(True, alpha=0.3)
+        gpu_ax.set_ylim(1e8, 1e14)
+
+        plt.tight_layout()
+        return fig
+
+    def _scatter_on_roofline(self, ax, results):
+        """Add benchmark points to a roofline axis."""
+        if not results:
+            return
+
+        # Color by mode
+        mode_colors = {}
+        cmap = plt.cm.tab10
+        for i, mode in enumerate(sorted(set(r['mode'] for r in results))):
+            mode_colors[mode] = cmap(i % 10)
+
+        for result in results:
+            oi = self.calculate_operational_intensity(
+                tuple(result['image_size']), result['depth_count'], result['batch_size'])
+            perf = result.get('flops_per_second')
+            if not perf:
+                h, w = result['image_size']
+                perf = self._estimate_flops(h, w, result['depth_count'],
+                                            result['batch_size']) / (result['mean_latency'] / 1000)
+            ax.scatter(oi, perf, color=mode_colors[result['mode']], alpha=0.6, s=40,
+                      edgecolors='none')
+
+    # ─── Phase 7: Enhanced Visualizations ────────────────────────────────
+    def plot_implementation_comparison(self):
+        """Bar chart comparing Python vs CUDA C++ vs OpenMP latency."""
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+        # Group results by mode, averaging across configs
+        mode_data = {}
+        for r in self.results:
+            mode = r['mode']
+            # Normalize mode names for grouping
+            if 'OpenMP' in mode:
+                mode = 'OpenMP (best)'
+            if mode not in mode_data:
+                mode_data[mode] = []
+            mode_data[mode].append(r)
+
+        # --- Left: Latency comparison for select configs ---
+        ax = axes[0]
+        target_configs = [(256, 3), (512, 5), (1024, 10)]
+        impl_modes = ['Single CPU', 'Single GPU', 'CUDA C++']
+        # Add best OpenMP if available
+        openmp_results = [r for r in self.results if 'OpenMP' in r['mode']]
+        if openmp_results:
+            impl_modes.append('OpenMP (best)')
+
+        x = np.arange(len(target_configs))
+        width = 0.18
+        for i, mode in enumerate(impl_modes):
+            latencies = []
+            for size_w, depth in target_configs:
+                candidates = [r for r in self.results
+                             if r['image_size'][0] == size_w and r['depth_count'] == depth]
+                if mode == 'OpenMP (best)':
+                    matches = [r for r in candidates if 'OpenMP' in r['mode']]
+                else:
+                    matches = [r for r in candidates if r['mode'] == mode]
+                if matches:
+                    latencies.append(min(r['mean_latency'] for r in matches))
+                else:
+                    latencies.append(0)
+            ax.bar(x + i * width, latencies, width, label=mode)
+
+        ax.set_xlabel('Configuration')
+        ax.set_ylabel('Latency (ms)')
+        ax.set_title('Implementation Comparison: Latency')
+        ax.set_xticks(x + width * (len(impl_modes) - 1) / 2)
+        ax.set_xticklabels([f'{s}x{s}x{d}' for s, d in target_configs])
+        ax.legend(fontsize=8)
+        ax.set_yscale('log')
+        ax.grid(True, alpha=0.3, axis='y')
+
+        # --- Right: Speedup over Single CPU ---
+        ax2 = axes[1]
+        for i, mode in enumerate(impl_modes[1:], 1):  # Skip Single CPU (baseline)
+            speedups = []
+            for size_w, depth in target_configs:
+                candidates = [r for r in self.results
+                             if r['image_size'][0] == size_w and r['depth_count'] == depth]
+                cpu_matches = [r for r in candidates if r['mode'] == 'Single CPU']
+                if mode == 'OpenMP (best)':
+                    other_matches = [r for r in candidates if 'OpenMP' in r['mode']]
+                else:
+                    other_matches = [r for r in candidates if r['mode'] == mode]
+                if cpu_matches and other_matches:
+                    cpu_lat = min(r['mean_latency'] for r in cpu_matches)
+                    other_lat = min(r['mean_latency'] for r in other_matches)
+                    speedups.append(cpu_lat / other_lat if other_lat > 0 else 0)
+                else:
+                    speedups.append(0)
+            ax2.bar(x + (i - 1) * width, speedups, width, label=mode)
+
+        ax2.set_xlabel('Configuration')
+        ax2.set_ylabel('Speedup over Single CPU')
+        ax2.set_title('Speedup Comparison')
+        ax2.set_xticks(x + width * (len(impl_modes) - 2) / 2)
+        ax2.set_xticklabels([f'{s}x{s}x{d}' for s, d in target_configs])
+        ax2.legend(fontsize=8)
+        ax2.grid(True, alpha=0.3, axis='y')
+
+        plt.tight_layout()
+        return fig
+
+    def plot_thread_scaling(self):
+        """Thread scaling plot with Amdahl's law overlay."""
+        openmp_results = [r for r in self.results if 'OpenMP' in r['mode']]
+        if not openmp_results:
+            return None
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        # Extract thread counts and group
+        thread_data = {}  # (image_size, depth) -> {threads: latency}
+        for r in openmp_results:
+            m = re.search(r'(\d+)-threads', r['mode'])
+            if not m:
+                continue
+            threads = int(m.group(1))
+            key = (r['image_size'][0], r['depth_count'])
+            if key not in thread_data:
+                thread_data[key] = {}
+            thread_data[key][threads] = r['mean_latency']
+
+        # --- Left: Speedup vs Thread Count ---
+        ax = axes[0]
+        for (sz, depth), td in sorted(thread_data.items()):
+            threads_sorted = sorted(td.keys())
+            base = td.get(1, td[min(td.keys())])
+            speedups = [base / td[t] for t in threads_sorted]
+            ax.plot(threads_sorted, speedups, 'o-', label=f'{sz}x{sz}x{depth}', markersize=4)
+
+        # Amdahl's law overlay (estimate parallel fraction)
+        t_range = np.array([1, 2, 4, 8, 16, 32, 64])
+        for p_frac in [0.90, 0.95, 0.99]:
+            amdahl = 1 / ((1 - p_frac) + p_frac / t_range)
+            ax.plot(t_range, amdahl, '--', alpha=0.4, color='gray',
+                   label=f"Amdahl p={p_frac}" if p_frac == 0.95 else None)
+
+        ax.plot(t_range, t_range, ':', alpha=0.3, color='black', label='Linear')
+        ax.set_xlabel('Thread Count')
+        ax.set_ylabel('Speedup')
+        ax.set_title('Thread Scaling (Speedup)')
+        ax.legend(fontsize=7, ncol=2)
+        ax.grid(True, alpha=0.3)
+        ax.set_xscale('log', base=2)
+
+        # --- Right: Efficiency vs Thread Count ---
+        ax2 = axes[1]
+        for (sz, depth), td in sorted(thread_data.items()):
+            threads_sorted = sorted(td.keys())
+            base = td.get(1, td[min(td.keys())])
+            efficiency = [base / (td[t] * t) for t in threads_sorted]
+            ax2.plot(threads_sorted, efficiency, 'o-', label=f'{sz}x{sz}x{depth}', markersize=4)
+
+        ax2.axhline(y=1.0, color='black', linestyle=':', alpha=0.3, label='Ideal')
+        ax2.set_xlabel('Thread Count')
+        ax2.set_ylabel('Parallel Efficiency')
+        ax2.set_title('Thread Scaling (Efficiency)')
+        ax2.legend(fontsize=7, ncol=2)
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xscale('log', base=2)
+        ax2.set_ylim(0, 1.1)
+
+        plt.tight_layout()
+        return fig
+
+    def plot_latency_cdfs(self):
+        """Latency CDF per mode with 2.5ms (400 Hz) budget line."""
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        mode_colors = {}
+        cmap = plt.cm.tab10
+        modes_seen = sorted(set(r['mode'] for r in self.results
+                               if 'OpenMP' not in r['mode']))  # Skip per-thread OpenMP
+        # Add summary OpenMP modes
+        openmp_threads = set()
+        for r in self.results:
+            m = re.search(r'(\d+)-threads', r['mode'])
+            if m:
+                openmp_threads.add(int(m.group(1)))
+        if openmp_threads:
+            modes_seen.append(f'OpenMP {max(openmp_threads)}-threads')
+
+        for i, mode in enumerate(modes_seen):
+            mode_colors[mode] = cmap(i % 10)
+
+        for mode in modes_seen:
+            mode_results = [r for r in self.results if r['mode'] == mode]
+            if not mode_results:
+                continue
+            all_latencies = sorted([r['mean_latency'] for r in mode_results])
+            cdf = np.arange(1, len(all_latencies) + 1) / len(all_latencies)
+            ax.plot(all_latencies, cdf, label=mode, color=mode_colors[mode], linewidth=1.5)
+
+        # 400 Hz budget line (2.5 ms)
+        ax.axvline(x=2.5, color='red', linestyle='--', linewidth=2,
+                  label='2.5 ms (400 Hz budget)')
+
+        ax.set_xlabel('Latency (ms)')
+        ax.set_ylabel('CDF')
+        ax.set_title('Latency CDF by Implementation')
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+        ax.set_xscale('log')
+        ax.set_xlim(0.01, 10000)
+
+        plt.tight_layout()
+        return fig
+
+    def plot_gpu_memory_utilization(self):
+        """GPU VRAM usage vs problem size."""
+        gpu_results = [r for r in self.results
+                      if ('GPU' in r['mode'] or 'CUDA' in r['mode'])
+                      and r.get('gpu_memory_used') and r['gpu_memory_used'] > 0]
+        if not gpu_results:
+            return None
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Problem size = H * W * depth
+        sizes = []
+        mem_usage = []
+        labels = []
+        for r in gpu_results:
+            h, w = r['image_size']
+            prob_size = h * w * r['depth_count'] * r['batch_size']
+            sizes.append(prob_size)
+            mem_usage.append(r['gpu_memory_used'])
+            labels.append(r['mode'])
+
+        mode_set = sorted(set(labels))
+        for mode in mode_set:
+            mask = [l == mode for l in labels]
+            s = [sizes[i] for i in range(len(sizes)) if mask[i]]
+            m = [mem_usage[i] for i in range(len(mem_usage)) if mask[i]]
+            ax.scatter(s, m, label=mode, alpha=0.6, s=30)
+
+        # VRAM budget line
+        ax.axhline(y=32768, color='red', linestyle='--', alpha=0.5,
+                  label='32 GB VRAM limit')
+
+        ax.set_xlabel('Problem Size (total pixels)')
+        ax.set_ylabel('GPU Memory (MB)')
+        ax.set_title('GPU Memory Utilization vs Problem Size')
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+        ax.set_xscale('log')
+
+        plt.tight_layout()
+        return fig
+
+    def generate_performance_report(self, output_dir: str,
+                                    ncu_csv: Optional[str] = None):
+        """Generate comprehensive performance report with all plots."""
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Original plots
+        roofline_fig = self.create_roofline_plot('both')
+        roofline_fig.savefig(output_path / 'roofline_analysis.png', dpi=300, bbox_inches='tight')
+        plt.close(roofline_fig)
+
+        scaling_fig = self.analyze_scaling_efficiency()
+        scaling_fig.savefig(output_path / 'scaling_analysis.png', dpi=300, bbox_inches='tight')
+        plt.close(scaling_fig)
+
+        # Multi-level roofline
+        ml_fig = self.create_multilevel_roofline(ncu_csv)
+        ml_fig.savefig(output_path / 'multilevel_roofline.png', dpi=300, bbox_inches='tight')
+        plt.close(ml_fig)
+
+        # Phase 7: Enhanced visualizations
+        impl_fig = self.plot_implementation_comparison()
+        impl_fig.savefig(output_path / 'implementation_comparison.png', dpi=300, bbox_inches='tight')
+        plt.close(impl_fig)
+
+        thread_fig = self.plot_thread_scaling()
+        if thread_fig:
+            thread_fig.savefig(output_path / 'thread_scaling.png', dpi=300, bbox_inches='tight')
+            plt.close(thread_fig)
+
+        cdf_fig = self.plot_latency_cdfs()
+        cdf_fig.savefig(output_path / 'latency_cdfs.png', dpi=300, bbox_inches='tight')
+        plt.close(cdf_fig)
+
+        mem_fig = self.plot_gpu_memory_utilization()
+        if mem_fig:
+            mem_fig.savefig(output_path / 'gpu_memory_utilization.png', dpi=300, bbox_inches='tight')
+            plt.close(mem_fig)
+
+        # Text report
+        report_file = output_path / 'performance_report.txt'
+        with open(report_file, 'w') as f:
+            self._write_text_report(f)
+
+        print(f"Performance report generated in {output_path}")
+        for name in ['roofline_analysis', 'scaling_analysis', 'multilevel_roofline',
+                      'implementation_comparison', 'thread_scaling', 'latency_cdfs',
+                      'gpu_memory_utilization', 'performance_report']:
+            ext = '.txt' if name == 'performance_report' else '.png'
+            p = output_path / (name + ext)
+            if p.exists():
+                print(f"  - {name}{ext}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Roofline Analysis for Holographic Reconstruction")
     parser.add_argument("results_file", help="Path to benchmark results JSON file")
@@ -354,6 +814,8 @@ def main():
                        help="Output directory for analysis results")
     parser.add_argument("--device", choices=['cpu', 'gpu', 'both'], default='both',
                        help="Device type for roofline analysis")
+    parser.add_argument("--ncu-csv", default=None,
+                       help="Path to Nsight Compute CSV export for empirical roofline")
 
     args = parser.parse_args()
 
@@ -362,7 +824,7 @@ def main():
         return
 
     analyzer = RooflineAnalyzer(args.results_file)
-    analyzer.generate_performance_report(args.output_dir)
+    analyzer.generate_performance_report(args.output_dir, ncu_csv=args.ncu_csv)
 
 if __name__ == "__main__":
     main()

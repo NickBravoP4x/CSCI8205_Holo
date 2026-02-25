@@ -14,9 +14,8 @@
 static constexpr float PI = 3.14159265358979323846f;
 static constexpr int BLOCK_SIZE = 256;
 
-// ─── Kernel 1: Pad hologram with median, apply fftshift trick ────────────────
-// Pads the hologram into a complex buffer and multiplies by (-1)^(x+y)
-// to achieve the equivalent of fftshift in frequency domain.
+// ─── Kernel 1: Pad hologram with median ─────────────────────────────────────
+// Pads the hologram into a complex buffer (real part only).
 __global__ void pad_hologram_kernel(
     const float* __restrict__ input,     // H_in x W_in
     cufftComplex* __restrict__ output,   // Hp x Wp complex
@@ -32,7 +31,6 @@ __global__ void pad_hologram_kernel(
     int row = idx / Wp;
     int col = idx % Wp;
 
-    // Determine pixel value (padded region = median, center = hologram)
     float val;
     int src_row = row - padding;
     int src_col = col - padding;
@@ -42,16 +40,14 @@ __global__ void pad_hologram_kernel(
         val = median_val;
     }
 
-    // fftshift trick: multiply by (-1)^(row+col)
-    float sign = ((row + col) & 1) ? -1.0f : 1.0f;
-    output[idx].x = val * sign;
+    output[idx].x = val;
     output[idx].y = 0.0f;
 }
 
 // ─── Kernel 2: Build propagation filter (f2_new) ────────────────────────────
-// Precomputes the f2_new array: sqrt(1 - (lambda/res)^2 * (fx^2 + fy^2))
-// where fx, fy are fftshift'd frequency coordinates.
-// This is stored WITHOUT fftshift since we used the (-1)^(x+y) trick instead.
+// Precomputes f2_new in DFT order (DC at corner), matching standard FFT layout.
+// Exactly replicates Python: f2 = fx²+fy², f2_new = fftshift(f2),
+// f2_new = sqrt(1 - (λ/r)² * f2_new)
 __global__ void build_propagation_filter_kernel(
     float* __restrict__ f2_new,
     int Hp, int Wp,
@@ -64,27 +60,19 @@ __global__ void build_propagation_filter_kernel(
     int row = idx / Wp;
     int col = idx % Wp;
 
-    // Frequency coordinates (matching Python: xx/Wp - 0.5, yy/Hp - 0.5)
-    // After fftshift, these map to standard DFT bin ordering
+    // Centered frequency coordinates
     float fx = (float)col / (float)Wp - 0.5f;
     float fy = (float)row / (float)Hp - 0.5f;
     float f2 = fx * fx + fy * fy;
 
-    // Apply fftshift to f2 (matches Python: self.f2_new = fftshift(f2))
-    // Then compute: temp = (lambda/res)^2; f2_new = temp*f2_new; f2_new = sqrt(1-f2_new)
-    float f2_shifted;
-    {
-        // fftshift: swap quadrants
-        int shifted_row = (row + Hp / 2) % Hp;
-        int shifted_col = (col + Wp / 2) % Wp;
-        float sfx = (float)shifted_col / (float)Wp - 0.5f;
-        float sfy = (float)shifted_row / (float)Hp - 0.5f;
-        f2_shifted = sfx * sfx + sfy * sfy;
-    }
+    // Apply fftshift: swap quadrants to get DFT order (DC at corner)
+    int shifted_row = (row + Hp / 2) % Hp;
+    int shifted_col = (col + Wp / 2) % Wp;
+    int shifted_idx = shifted_row * Wp + shifted_col;
 
-    float val = lambda_over_res_sq * f2_shifted;
+    float val = lambda_over_res_sq * f2;
     val = fmaxf(1.0f - val, 0.0f);
-    f2_new[idx] = sqrtf(val);
+    f2_new[shifted_idx] = sqrtf(val);
 }
 
 // ─── Kernel 3: Apply propagation and broadcast ──────────────────────────────
@@ -125,12 +113,11 @@ __global__ void apply_propagation_and_broadcast_kernel(
 }
 
 // ─── Kernel 4: Phase correction, intensity, remove padding ──────────────────
-// After IFFT, applies:
-//   1. Undo fftshift trick: multiply by (-1)^(row+col)
-//   2. Phase correction: rec *= exp(2j*pi*z/lambda)
-//   3. Intensity: |rec|^2
-//   4. Remove padding (crop to H_in x W_in)
-//   5. Store as [plane][row][col] layout
+// After IFFT (standard, no shift trick), applies:
+//   1. Phase correction: rec *= exp(2j*pi*z/lambda)
+//   2. Intensity: |rec|^2
+//   3. Remove padding (crop to H_in x W_in)
+//   4. Store as [plane][row][col] layout
 __global__ void phase_correction_and_intensity_kernel(
     const cufftComplex* __restrict__ rec,  // num_planes x Hp x Wp (IFFT output)
     float* __restrict__ intensity,          // num_planes x H_in x W_in
@@ -161,11 +148,6 @@ __global__ void phase_correction_and_intensity_kernel(
     cufftComplex r = rec[pad_idx];
     float re = r.x * fft_norm;
     float im = r.y * fft_norm;
-
-    // Undo fftshift trick: multiply by (-1)^(pad_row+pad_col)
-    float sign = ((pad_row + pad_col) & 1) ? -1.0f : 1.0f;
-    re *= sign;
-    im *= sign;
 
     // Phase correction: rec *= exp(2j*pi*z/lambda)
     float z = z_list[plane];

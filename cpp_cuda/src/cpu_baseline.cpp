@@ -95,21 +95,25 @@ void CPUHolographicReconstructor::ensure_initialized(int height, int width) {
     float lambda_over_res = params_.wavelength / eff_resolution_;
     float lambda_over_res_sq = lambda_over_res * lambda_over_res;
 
+    // Build f2_new in DFT order (DC at corner), matching Python's fftshift(f2)
     #pragma omp parallel for num_threads(params_.num_threads)
     for (int idx = 0; idx < pad_total; ++idx) {
         int row = idx / padded_w_;
         int col = idx % padded_w_;
 
-        // fftshift'd frequency coordinates
+        // Centered frequency coordinates
+        float fx = (float)col / (float)padded_w_ - 0.5f;
+        float fy = (float)row / (float)padded_h_ - 0.5f;
+        float f2 = fx * fx + fy * fy;
+
+        // fftshift: map centered coords to DFT order
         int shifted_row = (row + padded_h_ / 2) % padded_h_;
         int shifted_col = (col + padded_w_ / 2) % padded_w_;
-        float fx = (float)shifted_col / (float)padded_w_ - 0.5f;
-        float fy = (float)shifted_row / (float)padded_h_ - 0.5f;
-        float f2 = fx * fx + fy * fy;
+        int shifted_idx = shifted_row * padded_w_ + shifted_col;
 
         float val = lambda_over_res_sq * f2;
         val = std::max(1.0f - val, 0.0f);
-        f2_new_[idx] = std::sqrt(val);
+        f2_new_[shifted_idx] = std::sqrt(val);
     }
 
     // Build z_list
@@ -139,7 +143,7 @@ void CPUHolographicReconstructor::reconstruct_intensity(
                      sorted_input.end());
     float median_val = sorted_input[out_total / 2];
 
-    // Pad hologram with fftshift trick: multiply by (-1)^(row+col)
+    // Pad hologram (standard, no shift trick)
     #pragma omp parallel for num_threads(params_.num_threads)
     for (int idx = 0; idx < pad_total; ++idx) {
         int row = idx / padded_w_;
@@ -154,8 +158,7 @@ void CPUHolographicReconstructor::reconstruct_intensity(
             val = median_val;
         }
 
-        float sign = ((row + col) & 1) ? -1.0f : 1.0f;
-        fft_in_[idx][0] = val * sign;
+        fft_in_[idx][0] = val;
         fft_in_[idx][1] = 0.0f;
     }
 
@@ -203,11 +206,6 @@ void CPUHolographicReconstructor::reconstruct_intensity(
             // Normalize IFFT (FFTW doesn't normalize)
             float re = ifft_out_[pad_idx][0] * fft_norm;
             float im = ifft_out_[pad_idx][1] * fft_norm;
-
-            // Undo fftshift trick
-            float sign = ((pad_row + pad_col) & 1) ? -1.0f : 1.0f;
-            re *= sign;
-            im *= sign;
 
             // Phase correction
             float re2 = re * pc_cos - im * pc_sin;

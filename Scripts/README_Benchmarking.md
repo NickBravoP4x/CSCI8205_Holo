@@ -1,167 +1,159 @@
 # Holographic Reconstruction Benchmarking Framework
 
-This benchmarking framework provides comprehensive performance analysis for your holographic reconstruction implementation, supporting all the metrics and analysis needed for your CSCI 8205 project.
+Comprehensive performance analysis for holographic reconstruction across Python (PyTorch), CUDA C++ (cuFFT), and OpenMP C++ (FFTW) implementations.
 
-## Files Created
+Part of the CSCI 8205 Multi-GPU Pipeline Architecture project.
 
-1. **`holographic_benchmark.py`** - Main benchmarking framework
-2. **`roofline_analysis.py`** - Roofline performance analysis
-3. **`CSCI8205_Proposal_BravoFrank.txt`** - Readable version of your proposal
+## Files
 
-## Features
+| File | Purpose |
+|---|---|
+| `holographic_reconstruction.py` | PyTorch reference implementation |
+| `holographic_benchmark.py` | Multi-mode benchmark framework |
+| `roofline_analysis.py` | Roofline model + enhanced visualizations |
+| `validate_cuda.py` | Cross-validation: Python ↔ CUDA ↔ OpenMP |
 
-### Benchmarking Modes
-- **Single CPU**: Individual hologram processing on CPU
-- **Single GPU**: Individual hologram processing on GPU
-- **Batch CPU**: Batched hologram processing on CPU
-- **Batch GPU**: Batched hologram processing on GPU
+## Benchmark Modes
 
-### Performance Metrics
-- **Latency**: Mean, median, P95, P99 latencies
-- **Throughput**: Operations per second
-- **Memory Usage**: Peak memory consumption
-- **System Utilization**: CPU and GPU utilization
-- **Computational Intensity**: FLOPS/byte analysis
-- **Scaling Analysis**: Performance across image sizes and depths
-
-### Roofline Analysis
-- Compute vs memory-bound characterization
-- Operational intensity calculation
-- Hardware utilization analysis
-- Performance bottleneck identification
+| Mode | Backend | Notes |
+|---|---|---|
+| Single CPU | PyTorch CPU | One hologram at a time |
+| Single GPU | PyTorch GPU | One hologram at a time, `cuda:0` |
+| Batch CPU | PyTorch CPU | Batched via `generate_rgb_stack_images` |
+| Batch GPU | PyTorch GPU | Batched on `cuda:0` |
+| CUDA C++ | cuFFT via pybind11 | Requires `cuda_holographic` module |
+| OpenMP N-threads | FFTW+OpenMP via pybind11 | Sweeps {1,2,4,8,16,32,64} threads |
 
 ## Quick Start
 
-### Install Dependencies
+### Install dependencies
+
 ```bash
-pip install numpy torch matplotlib seaborn tqdm psutil GPUtil
+conda activate csci
+pip install numpy torch matplotlib seaborn tqdm psutil GPUtil pybind11
 ```
 
-### Run Basic Benchmark
-```bash
-cd /home/p4x/software/CSCI8205/Scripts
+### Run benchmarks
 
-# Quick benchmark (recommended for testing)
+```bash
+cd Scripts
+
+# Quick benchmark (Python modes only)
 python holographic_benchmark.py --quick
 
-# Full benchmark (comprehensive analysis)
+# Full benchmark (all 240 Python configs)
 python holographic_benchmark.py
 
-# Custom configuration
-python holographic_benchmark.py --iterations 50 --output-dir my_results
+# Include C++/CUDA and OpenMP modes (requires build)
+export PYTHONPATH=../cpp_cuda/build:$PYTHONPATH
+python holographic_benchmark.py
 ```
 
-### Run Roofline Analysis
+### Run roofline analysis
+
 ```bash
-# After running benchmark, analyze results
-python roofline_analysis.py benchmark_results/benchmark_results.json
+# Generate all 7 plots from benchmark JSON
+python roofline_analysis.py ../benchmark_results/benchmark_results.json
 
-# Analyze specific device
-python roofline_analysis.py benchmark_results/benchmark_results.json --device gpu
+# With Nsight Compute empirical data overlay
+python roofline_analysis.py ../benchmark_results/benchmark_results.json \
+       --ncu-csv ../profiling/ncu_reports/ncu_512x512_d5.csv
 ```
+
+### Cross-validate implementations
+
+```bash
+export PYTHONPATH=../cpp_cuda/build:$PYTHONPATH
+python validate_cuda.py
+```
+
+Tests 20 configurations (4 image sizes × 5 depth counts), comparing Python (PyTorch CPU), CUDA C++, and OpenMP C++ outputs. Expected tolerances:
+- CUDA ↔ OpenMP: < 1e-5 (same filter computation)
+- C++ ↔ Python: < 1e-2 (different FFT libraries: cuFFT/FFTW vs PyTorch)
 
 ## Benchmark Configuration
 
-### Default Full Configuration
+### Full (default)
+
 - **Image sizes**: 128×128, 256×256, 512×512, 1024×1024
 - **Depth counts**: 1, 3, 5, 10, 20 planes
 - **Batch sizes**: 1, 2, 4, 8, 16
 - **Iterations**: 20 per configuration
 - **Warmup**: 5 iterations
 
-### Quick Configuration
+### Quick (`--quick`)
+
 - **Image sizes**: 256×256, 512×512
-- **Depth counts**: 3, 10 planes
+- **Depth counts**: 3, 10
 - **Batch sizes**: 1, 4
-- **Iterations**: 5 per configuration
+- **Iterations**: 5
 
-## Output Files
+## Performance Metrics
 
-### Benchmark Results
-- `benchmark_results/benchmark_results.json` - Complete benchmark data
-- Contains system info, configuration, and detailed results
+Each configuration records:
 
-### Roofline Analysis
-- `roofline_analysis/roofline_analysis.png` - Roofline plots
-- `roofline_analysis/scaling_analysis.png` - Scaling efficiency plots
-- `roofline_analysis/performance_report.txt` - Detailed text report
+- **Latency**: mean, median, P95, P99, std_dev (milliseconds)
+- **Throughput**: operations per second
+- **Memory**: peak usage (MB)
+- **System utilization**: CPU%, GPU%, GPU VRAM
+- **Computational**: estimated FLOPS/sec, arithmetic intensity
 
-## Key Metrics for Your Project
+## Output
 
-Based on your proposal, focus on these metrics:
+### Benchmark results
 
-### Real-Time Requirements (400 Hz target)
-- **Target latency**: <2.5ms per hologram (1000ms / 400Hz)
-- **Pipeline latency**: 11-13ms total (your 6-stage pipeline)
-- **Tail latency**: P99/P50 ratio for predictability
+`benchmark_results/benchmark_results.json` — Complete results with system info, configuration, and per-config metrics.
 
-### Multi-GPU Scaling
-- **Strong scaling**: Performance vs GPU count
-- **Scaling efficiency**: Actual vs theoretical speedup
-- **Memory bandwidth utilization**: Roofline analysis
+### Roofline analysis plots
 
-### System Architecture
-- **NUMA effects**: Memory locality impact
-- **Cache coherence**: L1/L2/L3 miss rates
-- **Pipeline utilization**: GPU active time percentage
+| File | Description |
+|---|---|
+| `roofline_analysis.png` | CPU + GPU roofline with benchmark points |
+| `multilevel_roofline.png` | L1/L2/L3/DRAM bandwidth ceilings, ncu overlay |
+| `implementation_comparison.png` | Latency bars + speedup: Python vs CUDA vs OpenMP |
+| `thread_scaling.png` | OpenMP speedup/efficiency vs threads, Amdahl's law |
+| `latency_cdfs.png` | Per-mode CDF with 2.5 ms (400 Hz) budget line |
+| `gpu_memory_utilization.png` | VRAM usage vs problem size |
+| `scaling_analysis.png` | Image/depth/batch scaling + memory vs performance |
+| `performance_report.txt` | Text summary of all modes |
 
-## Expected Results (from your proposal)
+## Hardware Specifications
 
-1. **GPU vs CPU**: Expect ~10× GPU speedup
-2. **Multi-GPU scaling**: 8-12× speedup with >80% efficiency up to 4 GPUs
-3. **Memory bottleneck**: CPU saturates memory bandwidth earlier
-4. **Autofocus impact**: 10-100× computational overhead vs core pipeline
+Roofline analysis uses these hardware parameters (configured in `roofline_analysis.py`):
 
-## Integration with Your Project Timeline
+**CPU (AMD Threadripper PRO 7975WX)**:
+- Peak FP32: 2.7 TFLOPS (32c × 2 FMA × 16 SP/AVX-512 × 5.3 GHz)
+- DRAM bandwidth: 150 GB/s (8-channel DDR5-5200)
+- L1d: 32 KB/core, L2: 1 MB/core, L3: 128 MB total
 
-### Week 1-2 (Current): Baseline Benchmarking
-- Run comprehensive benchmarks on current Python implementation
-- Establish baseline performance metrics
-- Generate roofline analysis plots
+**GPU (NVIDIA RTX 5090)**:
+- Peak FP32: 105 TFLOPS
+- GDDR7 bandwidth: 1790 GB/s
+- VRAM: 32 GB
 
-### Week 3-4: C++/CUDA Validation
-- Compare C++/CUDA implementation against these Python baselines
-- Validate correctness using same test configurations
-- Measure performance improvements
+## Building the C++/CUDA Module
 
-### Week 5+: Pipeline Architecture
-- Use these metrics to inform stage-to-GPU grouping decisions
-- Benchmark different pipeline configurations
-- Compare against baseline single-stage performance
+The CUDA C++ and OpenMP benchmarks require building the `cuda_holographic` pybind11 module:
 
-## System-Specific Tuning
-
-You may need to adjust hardware specifications in `roofline_analysis.py`:
-
-```python
-self.cpu_specs = {
-    'peak_compute': 2000e9,  # Adjust for your Threadripper
-    'memory_bandwidth': 100e9,  # Adjust for your memory
-}
-
-self.gpu_specs = {
-    'peak_compute': 10e12,  # Adjust for your GPU
-    'memory_bandwidth': 900e9,  # Adjust for your GPU memory
-}
+```bash
+cd cpp_cuda
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -Dpybind11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
+make -j$(nproc)
+export PYTHONPATH=$(pwd):$PYTHONPATH
 ```
 
-## Troubleshooting
+The benchmark framework gracefully skips C++ modes if the module is not available.
 
-### Common Issues
-1. **CUDA out of memory**: Reduce batch sizes or image sizes
-2. **Long benchmark time**: Use `--quick` flag for initial testing
-3. **Missing dependencies**: Install with pip as shown above
+## Standalone Profiling
 
-### Performance Optimization
-1. **GPU warmup**: Framework includes automatic warmup iterations
-2. **Memory management**: Automatic cleanup between tests
-3. **System interference**: Close other applications during benchmarking
+For hardware counter profiling without Python overhead:
 
-## Next Steps
+```bash
+# GPU: Nsight Compute kernel profiling
+bash ../profiling/scripts/profile_gpu.sh 512 5
 
-1. **Run baseline benchmarks**: Establish current performance
-2. **Analyze bottlenecks**: Use roofline analysis to identify limitations
-3. **Plan C++/CUDA port**: Use insights to optimize implementation
-4. **Design pipeline**: Use metrics to inform multi-GPU architecture
-
-This framework provides all the baseline measurements needed for your multi-GPU pipeline architecture project!
+# CPU: perf cache hierarchy + thread scaling
+bash ../profiling/scripts/profile_cpu.sh 512 5
+```
