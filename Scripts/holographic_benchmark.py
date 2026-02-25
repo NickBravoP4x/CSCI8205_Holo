@@ -493,6 +493,124 @@ class HolographicBenchmark:
 
                     self.results.append(metrics)
 
+    def run_cuda_cpp_benchmark(self) -> None:
+        """Benchmark CUDA C++ (cuFFT) implementation."""
+        try:
+            import cuda_holographic
+        except ImportError:
+            print("Skipping CUDA C++ benchmarks - cuda_holographic module not found")
+            print("Build with: cd cpp_cuda/build && cmake .. && make -j$(nproc)")
+            return
+
+        print("=== CUDA C++ Benchmark ===")
+
+        for image_size in tqdm(self.config.image_sizes, desc="Image sizes"):
+            for depth_count in self.config.depth_counts:
+                hologram_np = self.generate_test_hologram(*image_size).numpy()
+
+                recon = cuda_holographic.CUDAReconstructor(num_planes=depth_count)
+
+                # Warmup
+                for _ in range(self.config.num_warmup):
+                    _ = recon.reconstruct_intensity(hologram_np)
+
+                # Benchmark
+                latencies = []
+                for _ in range(self.config.num_iterations):
+                    torch.cuda.synchronize()
+                    start_time = time.perf_counter()
+                    result = recon.reconstruct_intensity(hologram_np)
+                    torch.cuda.synchronize()
+                    end_time = time.perf_counter()
+
+                    latency_ms = (end_time - start_time) * 1000
+                    latencies.append(latency_ms)
+
+                flops = self.estimate_flops(image_size, depth_count)
+                mean_latency = np.mean(latencies)
+
+                metrics = PerformanceMetrics(
+                    mode="CUDA C++",
+                    image_size=image_size,
+                    depth_count=depth_count,
+                    batch_size=1,
+                    mean_latency=mean_latency,
+                    median_latency=np.median(latencies),
+                    p95_latency=np.percentile(latencies, 95),
+                    p99_latency=np.percentile(latencies, 99),
+                    std_latency=np.std(latencies),
+                    throughput=1000 / mean_latency,
+                    peak_memory_used=0,
+                    memory_efficiency=1.0,
+                    cpu_utilization=psutil.cpu_percent(),
+                    gpu_utilization=self.profiler.get_gpu_utilization(),
+                    gpu_memory_used=None,
+                    flops_per_second=flops / (mean_latency / 1000),
+                    memory_bandwidth_used=None,
+                    arithmetic_intensity=None
+                )
+                self.results.append(metrics)
+
+    def run_openmp_benchmark(self) -> None:
+        """Benchmark OpenMP C++ (FFTW) implementation with thread scaling."""
+        try:
+            import cuda_holographic
+        except ImportError:
+            print("Skipping OpenMP benchmarks - cuda_holographic module not found")
+            return
+
+        print("=== OpenMP C++ Benchmark ===")
+        thread_counts = [1, 2, 4, 8, 16, 32, 64]
+
+        for image_size in tqdm(self.config.image_sizes, desc="Image sizes"):
+            for depth_count in self.config.depth_counts:
+                hologram_np = self.generate_test_hologram(*image_size).numpy()
+
+                for num_threads in thread_counts:
+                    recon = cuda_holographic.CPUReconstructor(
+                        num_planes=depth_count,
+                        num_threads=num_threads
+                    )
+
+                    # Warmup
+                    for _ in range(self.config.num_warmup):
+                        _ = recon.reconstruct_intensity(hologram_np)
+
+                    # Benchmark
+                    latencies = []
+                    for _ in range(self.config.num_iterations):
+                        start_time = time.perf_counter()
+                        result = recon.reconstruct_intensity(hologram_np)
+                        end_time = time.perf_counter()
+
+                        latency_ms = (end_time - start_time) * 1000
+                        latencies.append(latency_ms)
+
+                    flops = self.estimate_flops(image_size, depth_count)
+                    mean_latency = np.mean(latencies)
+
+                    metrics = PerformanceMetrics(
+                        mode=f"OpenMP {num_threads}-threads",
+                        image_size=image_size,
+                        depth_count=depth_count,
+                        batch_size=1,
+                        mean_latency=mean_latency,
+                        median_latency=np.median(latencies),
+                        p95_latency=np.percentile(latencies, 95),
+                        p99_latency=np.percentile(latencies, 99),
+                        std_latency=np.std(latencies),
+                        throughput=1000 / mean_latency,
+                        peak_memory_used=0,
+                        memory_efficiency=1.0,
+                        cpu_utilization=psutil.cpu_percent(),
+                        gpu_utilization=None,
+                        gpu_memory_used=None,
+                        flops_per_second=flops / (mean_latency / 1000),
+                        memory_bandwidth_used=None,
+                        arithmetic_intensity=None
+                    )
+                    self.results.append(metrics)
+
     def run_scaling_analysis(self) -> None:
         """Run scaling analysis across different dimensions."""
         print("=== Scaling Analysis ===")
@@ -649,6 +767,10 @@ class HolographicBenchmark:
         self.run_single_gpu_benchmark()
         self.run_batch_cpu_benchmark()
         self.run_batch_gpu_benchmark()
+
+        # Run C++/CUDA and OpenMP benchmarks
+        self.run_cuda_cpp_benchmark()
+        self.run_openmp_benchmark()
 
         # Run scaling analysis
         self.run_scaling_analysis()

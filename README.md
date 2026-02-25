@@ -2,7 +2,7 @@
 
 CSCI 8205: Design and Implementation of Multiprocessor Systems — University of Minnesota
 
-**Author:** Nicholas Bravo-Frank (bravo095@umn.edu)
+**Authors:** Nicholas Bravo-Frank (bravo095@umn.edu), Anlei Chen (chen8264@umn.edu)
 
 ## Overview
 
