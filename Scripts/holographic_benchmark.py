@@ -788,6 +788,8 @@ def main():
     parser.add_argument("--output-dir", default="benchmark_results", help="Output directory for results")
     parser.add_argument("--iterations", type=int, default=20, help="Number of benchmark iterations")
     parser.add_argument("--no-save", action="store_true", help="Don't save results to file")
+    parser.add_argument("--mode", choices=["all", "python", "cuda-cpp", "openmp"],
+                       default="all", help="Which benchmark modes to run")
 
     args = parser.parse_args()
 
