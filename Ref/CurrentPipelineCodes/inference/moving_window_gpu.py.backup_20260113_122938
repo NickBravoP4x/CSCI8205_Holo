@@ -1,0 +1,47 @@
+import torch
+
+class MovingWindowEnhancer:
+    def __init__(self, window_size=60):
+        self.window_size = window_size
+        self.stack = None         # [window_size, H, W]
+        self.sum = None           # [H, W]
+        self.index = 0
+        self.filled = False
+
+    def update(self, new_frame):
+        frame_f16 = new_frame.to(dtype=torch.float16)
+
+        if self.stack is None:
+            shape = frame_f16.shape
+            self.stack = torch.zeros((self.window_size, *shape), dtype=torch.float16, device=frame_f16.device)
+            self.sum = torch.zeros(shape, dtype=torch.float16, device=frame_f16.device)
+
+        old_frame = self.stack[self.index]
+        self.sum -= old_frame
+        self.stack[self.index] = frame_f16
+        self.sum += frame_f16
+
+        self.index = (self.index + 1) % self.window_size
+        if self.index == 0:
+            self.filled = True
+
+        return frame_f16
+
+    def enhance(self, new_frame, return_float=False):
+        frame_f16 = self.update(new_frame)
+
+        count = self.window_size if self.filled else self.index
+        if count == 0:
+            count = 1  # Prevent division by zero on first frame
+
+        background = self.sum / count
+
+        # Normalize to background ~105 intensity
+        mean_background = background.mean()
+        scaling = torch.tensor(105.0, device=background.device, dtype=torch.float16) / (mean_background + 1e-3)
+        enhanced = (frame_f16 - background) * scaling + 105.0
+        enhanced = torch.clamp(enhanced, 0, 255)
+
+        if return_float:
+            return (enhanced / 255.0).to(dtype=torch.float32)  # Normalized float32 [0,1]
+        return enhanced.to(dtype=torch.uint8)

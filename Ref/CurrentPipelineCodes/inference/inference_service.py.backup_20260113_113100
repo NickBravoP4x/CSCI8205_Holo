@@ -1,0 +1,1610 @@
+#!/usr/bin/env python3
+"""
+HoloVision Inference Service
+Processes camera frames with enhancement, reconstruction, and detection
+"""
+import zmq
+import cv2
+import numpy as np
+import struct
+import time
+import torch
+import torch.nn.functional as F
+from pathlib import Path
+import queue
+import threading
+import csv
+from datetime import datetime
+from collections import deque
+import psutil
+
+# RAM monitoring thresholds
+RAM_DROP_THRESHOLD = 85.0  # Start dropping frames at 85% RAM usage
+RAM_CHECK_INTERVAL = 50    # Check RAM every N frames (not every frame for performance)
+
+def check_ram_critical():
+    """Check if RAM usage exceeds threshold. Returns True if we should drop frames."""
+    mem = psutil.virtual_memory()
+    return mem.percent >= RAM_DROP_THRESHOLD
+
+# Import local modules
+from moving_window_gpu import MovingWindowEnhancer
+from holographic_reconstruction import HolographicReconstructor
+from laser_spot_filter import LaserSpotFilter
+
+# Add project root to path for models.filter import
+import sys
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+from models.filter.inference import BackgroundFilter
+
+# YOLO detection
+try:
+    import logging
+    logging.getLogger("ultralytics").setLevel(logging.WARNING)  # Suppress verbose ultralytics output
+    from ultralytics import YOLO
+    YOLO_AVAILABLE = True
+except ImportError:
+    print("⚠️  ultralytics not available - detection will be disabled")
+    YOLO_AVAILABLE = False
+
+# TensorRT direct inference (bypasses ultralytics overhead)
+try:
+    import tensorrt as trt
+    TENSORRT_AVAILABLE = True
+except ImportError:
+    print("⚠️  tensorrt not available - will fall back to ultralytics for prefilter")
+    TENSORRT_AVAILABLE = False
+
+
+class TRTClassifier:
+    """Direct TensorRT inference for classifier - bypasses ultralytics overhead.
+
+    Achieves ~1000 FPS vs ~127 FPS through ultralytics wrapper.
+    """
+
+    def __init__(self, engine_path: str, device: int = 0):
+        """Load TensorRT engine and allocate buffers.
+
+        Args:
+            engine_path: Path to .engine file
+            device: CUDA device index
+        """
+        if not TENSORRT_AVAILABLE:
+            raise RuntimeError("TensorRT not available")
+
+        self.device = device
+        self.stream = torch.cuda.Stream(device=device)
+
+        # Load engine
+        self.logger = trt.Logger(trt.Logger.WARNING)
+        with open(engine_path, 'rb') as f:
+            engine_data = f.read()
+
+        self.runtime = trt.Runtime(self.logger)
+        self.engine = self.runtime.deserialize_cuda_engine(engine_data)
+        self.context = self.engine.create_execution_context()
+
+        # Get input/output info
+        self.input_name = self.engine.get_tensor_name(0)
+        self.output_name = self.engine.get_tensor_name(1)
+
+        input_shape = self.engine.get_tensor_shape(self.input_name)
+        output_shape = self.engine.get_tensor_shape(self.output_name)
+
+        # Handle dynamic batch dimension (-1)
+        if input_shape[0] == -1:
+            input_shape = (1,) + tuple(input_shape[1:])
+        if output_shape[0] == -1:
+            output_shape = (1,) + tuple(output_shape[1:])
+
+        self.input_shape = tuple(input_shape)
+        self.output_shape = tuple(output_shape)
+
+        # Pre-allocate GPU buffers
+        self.input_buffer = torch.zeros(self.input_shape, dtype=torch.float16, device=f'cuda:{device}')
+        self.output_buffer = torch.zeros(self.output_shape, dtype=torch.float16, device=f'cuda:{device}')
+
+        # Set tensor addresses
+        self.context.set_tensor_address(self.input_name, self.input_buffer.data_ptr())
+        self.context.set_tensor_address(self.output_name, self.output_buffer.data_ptr())
+
+        print(f"  TRTClassifier loaded: input={self.input_shape}, output={self.output_shape}")
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        """Run inference on input tensor.
+
+        Args:
+            x: Input tensor of shape (1, 3, H, W), float16, on GPU
+
+        Returns:
+            Class probabilities tensor of shape (num_classes,)
+        """
+        # Copy input (handles size mismatch via resize if needed)
+        if x.shape != self.input_shape:
+            x = F.interpolate(x, size=self.input_shape[2:], mode='bilinear', align_corners=False)
+
+        self.input_buffer.copy_(x)
+
+        # Run inference
+        self.context.execute_async_v3(self.stream.cuda_stream)
+        self.stream.synchronize()
+
+        # Softmax to get probabilities
+        raw_out = self.output_buffer.float().squeeze()
+        probs = torch.softmax(raw_out, dim=-1)
+
+        # Debug: log raw output periodically
+        if not hasattr(self, '_debug_count'):
+            self._debug_count = 0
+        self._debug_count += 1
+        if self._debug_count % 100 == 1:  # First call and every 100 calls
+            print(f"  🔧 TRTClassifier: raw={raw_out.tolist()} -> softmax={probs.tolist()}")
+
+        return probs
+
+    def warmup(self, n: int = 10):
+        """Warmup the engine with dummy data."""
+        dummy = torch.rand(self.input_shape, dtype=torch.float16, device=self.input_buffer.device)
+        for _ in range(n):
+            _ = self(dummy)
+        print(f"  TRTClassifier warmed up ({n} iterations)")
+
+
+# Global state
+enhancement_enabled = False
+detection_enabled = False
+confidence_threshold = 0.5
+model_path = "models/yolo_particles.pt"  # Default model path
+model = None
+model_warmed_up = False
+using_tensorrt = False  # True when TensorRT engine is loaded
+
+# Prefilter (classifier) state
+prefilter_enabled = False
+prefilter_model = None
+prefilter_path = "models/filter/weights.pt"  # TinyCNN background filter (~2500 FPS)
+prefilter_threshold = 0.3  # 98.7% recall at this threshold
+prefilter_warmed_up = False
+prefilter_skip_count = 0  # Frames skipped by prefilter
+prefilter_pass_count = 0  # Frames passed by prefilter
+enhancer = None
+reconstructor = None
+laser_filter = LaserSpotFilter(max_history=100, iou_threshold=0.8, min_hits=10)
+current_shape = None
+gpu_input_buffer = None  # Pre-allocated GPU tensor for fast upload
+prev_recon_shape = None
+total_particle_count = 0  # Cumulative count since detection enabled
+
+# Detection tracking by class (for Full Test results)
+detection_counts_by_class = {}  # class_name -> count
+total_detection_count = 0  # Total detections (all classes)
+
+# Recording state
+NUM_WRITER_THREADS = 4  # Use 4 parallel writer threads for high throughput
+recording = False
+recording_folder = None
+recording_target_count = 0
+recording_frame_counter = 0
+recording_start_time = None
+writer_queues = []
+writer_threads = []
+metadata_queue = queue.Queue()  # Queue for metadata CSV entries
+metadata_thread = None
+recording_lock = threading.Lock()  # Protect recording state
+fast_recording_mode = False  # Skip processing for high-speed capture
+save_percentage = 1.0  # Percentage of frames to save (0.0-1.0)
+save_start = 0  # First frame to save
+save_end = 0  # Last frame to save (exclusive)
+saved_frame_counter = 0  # Count of frames actually saved to disk
+
+# Profiling state (temporary)
+profiling_enabled = True  # Set to False to disable profiling overhead
+profiling_data = []  # List of dicts with timing data
+
+# Performance mode - suppress verbose logging for maximum FPS
+performance_mode = True  # Default to True for production use
+
+# Pipeline FPS tracking (rolling average)
+pipeline_fps = 0.0
+pipeline_times = []  # Recent pipeline times for rolling average
+PIPELINE_FPS_WINDOW = 30  # Number of frames to average over
+
+
+def image_writer_thread(queue_id, write_queue):
+    """Background thread that writes frames from queue to disk.
+
+    Args:
+        queue_id: ID of this writer thread (0-3)
+        write_queue: Queue to pull (frame, filename) tuples from
+    """
+    print(f"📝 Writer thread {queue_id} started")
+    frames_written = 0
+
+    while True:
+        try:
+            item = write_queue.get(timeout=1.0)
+
+            if item is None:  # Poison pill to stop thread
+                print(f"📝 Writer thread {queue_id} stopping (wrote {frames_written} frames)")
+                break
+
+            frame, filename = item
+
+            try:
+                # Write JPEG with high quality
+                cv2.imwrite(filename, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                frames_written += 1
+
+            except Exception as e:
+                print(f"❌ Writer thread {queue_id} - Failed to write {filename}: {e}")
+
+        except queue.Empty:
+            continue
+        except Exception as e:
+            print(f"❌ Writer thread {queue_id} error: {e}")
+
+
+def metadata_writer_thread(output_folder):
+    """Background thread that writes metadata CSV file.
+
+    Writes: frame_id, timestamp_unix, timestamp_str, filename
+    """
+    csv_path = Path(output_folder) / "frame_metadata.csv"
+    print(f"📊 Metadata writer started: {csv_path}")
+
+    try:
+        with open(csv_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['frame_id', 'timestamp_unix', 'timestamp_iso', 'filename'])
+
+            while True:
+                try:
+                    item = metadata_queue.get(timeout=1.0)
+
+                    if item is None:  # Poison pill
+                        print(f"📊 Metadata writer stopping")
+                        break
+
+                    frame_id, timestamp_unix, timestamp_str, filename = item
+                    writer.writerow([frame_id, f"{timestamp_unix:.6f}", timestamp_str, filename])
+                    csvfile.flush()  # Ensure data is written immediately
+
+                except queue.Empty:
+                    continue
+
+    except Exception as e:
+        print(f"❌ Metadata writer error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def initialize_recording_threads(images_folder, dataset_folder):
+    """Initialize writer threads and queues.
+
+    Args:
+        images_folder: Folder where images are saved (for writer threads)
+        dataset_folder: Parent folder where metadata CSV is saved
+    """
+    global writer_queues, writer_threads, metadata_thread
+
+    # Create queues for each writer thread
+    writer_queues = [queue.Queue(maxsize=25) for _ in range(NUM_WRITER_THREADS)]
+
+    # Start writer threads
+    writer_threads = []
+    for i, q in enumerate(writer_queues):
+        thread = threading.Thread(target=image_writer_thread, args=(i, q), daemon=True)
+        thread.start()
+        writer_threads.append(thread)
+
+    # Start metadata writer thread (writes to parent folder)
+    metadata_thread = threading.Thread(target=metadata_writer_thread, args=(dataset_folder,), daemon=True)
+    metadata_thread.start()
+
+    print(f"✅ Initialized {NUM_WRITER_THREADS} writer threads + metadata thread")
+
+
+def stop_recording_threads():
+    """Stop all writer threads gracefully."""
+    global writer_queues, writer_threads, metadata_thread
+
+    # Send poison pills to all writer threads
+    for q in writer_queues:
+        q.put(None)
+
+    # Send poison pill to metadata thread
+    metadata_queue.put(None)
+
+    # Wait for threads to finish
+    for thread in writer_threads:
+        thread.join(timeout=2.0)
+
+    if metadata_thread:
+        metadata_thread.join(timeout=2.0)
+
+    writer_queues.clear()
+    writer_threads.clear()
+    metadata_thread = None
+
+    print(f"✅ All writer threads stopped")
+
+
+def main():
+    global enhancement_enabled, detection_enabled, confidence_threshold, model_path
+    global model, model_warmed_up, using_tensorrt, enhancer, reconstructor, laser_filter
+    global current_shape, prev_recon_shape, total_particle_count
+    global recording, recording_folder, recording_target_count, recording_frame_counter
+    global recording_start_time, writer_queues, writer_threads, metadata_thread
+    global detection_counts_by_class, total_detection_count
+    global fast_recording_mode, performance_mode
+    global prefilter_enabled, prefilter_model, prefilter_path, prefilter_threshold
+    global prefilter_warmed_up, prefilter_skip_count, prefilter_pass_count
+    global pipeline_fps, pipeline_times
+    global save_start, save_end, save_percentage, saved_frame_counter
+
+    context = zmq.Context()
+
+    # Subscribe to camera feed (port 5558)
+    camera_sub = context.socket(zmq.SUB)
+    camera_sub.setsockopt(zmq.SUBSCRIBE, b"")
+    camera_sub.setsockopt(zmq.CONFLATE, 0)  # Disable CONFLATE - buffer frames for FIFO processing
+    camera_sub.setsockopt(zmq.RCVHWM, 100)  # Limit ZMQ receive buffer to 100 frames
+    camera_sub.connect("tcp://localhost:5558")
+
+    # Publish processed frames (port 5559)
+    processed_pub = context.socket(zmq.PUB)
+    processed_pub.setsockopt(zmq.SNDHWM, 10)  # Limit send buffer to 10 frames - prevents backlog buildup
+    processed_pub.bind("tcp://*:5559")
+
+    # Publish detection status (port 5561)
+    status_pub = context.socket(zmq.PUB)
+    status_pub.bind("tcp://*:5561")
+
+    # Control socket (port 5560)
+    control_rep = context.socket(zmq.REP)
+    control_rep.bind("tcp://*:5560")
+
+    print("🧠 HoloVision Inference Service")
+    print("=" * 50)
+    print("📡 Camera input: port 5558 (SUB)")
+    print("📤 Processed output: port 5559 (PUB)")
+    print("📊 Status output: port 5561 (PUB)")
+    print("🎛️  Control: port 5560 (REP)")
+    print("=" * 50)
+    print("Ready to process frames...")
+
+    frame_count = 0
+    dropped_frames = 0
+
+    # Frame buffer for FIFO processing (normal mode only)
+    FRAME_BUFFER_MAX = 200  # Maximum frames to buffer before auto-dropping oldest
+    frame_buffer = deque(maxlen=FRAME_BUFFER_MAX)
+    ram_check_counter = 0
+    frames_dropped_ram = 0  # Track RAM-based drops separately
+
+    while True:
+        try:
+            # Handle control commands (non-blocking)
+            if control_rep.poll(0):
+                msg = control_rep.recv_json()
+                cmd = msg.get("cmd")
+
+                if cmd == "set_enhancement":
+                    enhancement_enabled = msg.get("enabled", False)
+                    control_rep.send_json({"status": "ok", "enhancement": enhancement_enabled})
+                    print(f"🧪 Enhancement {'enabled' if enhancement_enabled else 'disabled'}")
+
+                    # Reset enhancer when toggling
+                    if not enhancement_enabled:
+                        enhancer = None
+                        current_shape = None
+
+                elif cmd == "set_performance_mode":
+                    performance_mode = msg.get("enabled", True)
+                    print(f"{'⚡' if performance_mode else '📝'} Performance mode: {'ON - verbose logging suppressed' if performance_mode else 'OFF - verbose logging enabled'}")
+                    control_rep.send_json({"status": "ok", "performance_mode": performance_mode})
+
+                elif cmd == "set_prefilter":
+                    prefilter_enabled = msg.get("enabled", False)
+                    new_threshold = msg.get("threshold", prefilter_threshold)
+                    prefilter_threshold = new_threshold
+
+                    print(f"{'🔍' if prefilter_enabled else '⏭️'} Prefilter: {'ON' if prefilter_enabled else 'OFF'} (threshold: {prefilter_threshold})")
+
+                    # Reset stats when toggling
+                    prefilter_skip_count = 0
+                    prefilter_pass_count = 0
+
+                    # Load prefilter model if enabling and not loaded
+                    if prefilter_enabled and prefilter_model is None:
+                        prefilter_path_obj = Path(prefilter_path)
+                        if prefilter_path_obj.exists():
+                            print(f"  Loading prefilter: {prefilter_path}")
+                            try:
+                                prefilter_model = BackgroundFilter(
+                                    weights_path=str(prefilter_path),
+                                    threshold=prefilter_threshold,
+                                    device='cuda:0',
+                                    image_shape=(540, 720)
+                                )
+                                prefilter_warmed_up = True
+                                print(f"  ✅ Prefilter loaded (TinyCNN - ~2500 FPS)")
+                            except Exception as e:
+                                print(f"  ❌ Failed to load prefilter: {e}")
+                                import traceback
+                                traceback.print_exc()
+                                prefilter_enabled = False
+                        else:
+                            print(f"  ❌ Prefilter not found: {prefilter_path}")
+                            prefilter_enabled = False
+
+                    control_rep.send_json({
+                        "status": "ok",
+                        "prefilter_enabled": prefilter_enabled,
+                        "prefilter_threshold": prefilter_threshold,
+                        "prefilter_loaded": prefilter_model is not None
+                    })
+
+                elif cmd == "set_detection":
+                    print(f"\n{'='*60}")
+                    print(f"🎛️  DETECTION COMMAND RECEIVED")
+                    print(f"{'='*60}")
+
+                    prev_detection_state = detection_enabled
+                    detection_enabled = msg.get("enabled", False)
+                    confidence_threshold = msg.get("conf", 0.5)
+                    new_model_path = msg.get("model", model_path)
+
+                    # Reset particle count when detection state changes
+                    if detection_enabled and not prev_detection_state:
+                        # Detection being enabled - reset count
+                        total_particle_count = 0
+                        print(f"  🔄 Reset particle count to 0 (detection enabled)")
+                    elif not detection_enabled and prev_detection_state:
+                        # Detection being disabled - reset count
+                        total_particle_count = 0
+                        print(f"  🔄 Reset particle count to 0 (detection disabled)")
+
+                    print(f"  Requested state: {'ENABLE' if detection_enabled else 'DISABLE'}")
+                    print(f"  Confidence: {confidence_threshold}")
+                    print(f"  Model path: {new_model_path}")
+                    print(f"  YOLO available: {YOLO_AVAILABLE}")
+
+                    # Load model if detection is being enabled
+                    if detection_enabled and YOLO_AVAILABLE:
+                        if model is None or new_model_path != model_path:
+                            model_path = new_model_path
+                            print(f"\n📦 Loading YOLO model...")
+                            print(f"  Path: {model_path}")
+
+                            # Check for TensorRT engine first (prefer .engine over .pt)
+                            model_path_obj = Path(model_path)
+                            engine_path = model_path_obj.with_suffix('.engine')
+
+                            print(f"  Checking for TensorRT engine: {engine_path}")
+                            print(f"  Engine exists: {engine_path.exists()}")
+
+                            if engine_path.exists():
+                                # Use TensorRT engine for faster inference
+                                print(f"  Found TensorRT engine: {engine_path}")
+                                print(f"  File size: {engine_path.stat().st_size / 1024 / 1024:.1f} MB")
+                                print(f"  Loading TensorRT engine...")
+                                try:
+                                    model = YOLO(str(engine_path))
+                                    model_warmed_up = False
+                                    using_tensorrt = True
+                                    print(f"✅ TensorRT engine loaded successfully")
+                                    print(f"  Model type: {type(model)}")
+                                except Exception as e:
+                                    print(f"⚠️ Failed to load TensorRT engine: {e}")
+                                    print(f"  Falling back to PyTorch model...")
+                                    using_tensorrt = False
+                                    # Fall through to PyTorch loading below
+
+                            if not using_tensorrt:
+                                # Load PyTorch model
+                                print(f"  Exists: {model_path_obj.exists()}")
+
+                                if model_path_obj.exists():
+                                    try:
+                                        print(f"  File size: {model_path_obj.stat().st_size / 1024 / 1024:.1f} MB")
+                                        print(f"  Loading PyTorch model (this may take 10-30 seconds)...")
+
+                                        model = YOLO(model_path)
+                                        model_warmed_up = False
+                                        using_tensorrt = False
+
+                                        print(f"✅ YOLO model loaded successfully")
+                                        print(f"  Model type: {type(model)}")
+                                        try:
+                                            input_size = model.model.args.get('imgsz', 'unknown')
+                                        except (AttributeError, TypeError):
+                                            input_size = 640  # Default for TensorRT
+                                        print(f"  Input size: {input_size}")
+                                    except Exception as e:
+                                        print(f"❌ Failed to load YOLO model: {e}")
+                                        import traceback
+                                        traceback.print_exc()
+                                        detection_enabled = False
+                                        model = None
+                                else:
+                                    print(f"❌ Model not found at: {model_path}")
+                                    print(f"  Absolute path: {model_path_obj.absolute()}")
+                                    print(f"  Current working dir: {Path.cwd()}")
+                                    detection_enabled = False
+                                    model = None
+                        else:
+                            print(f"✅ Model already loaded, reusing existing model")
+
+                        # Load prefilter model if prefilter is enabled and not yet loaded
+                        if prefilter_enabled and prefilter_model is None:
+                            prefilter_path_obj = Path(prefilter_path)
+                            if prefilter_path_obj.exists():
+                                print(f"\n🔍 Loading prefilter model...")
+                                print(f"  Path: {prefilter_path}")
+                                try:
+                                    prefilter_model = BackgroundFilter(
+                                        weights_path=str(prefilter_path),
+                                        threshold=prefilter_threshold,
+                                        device='cuda:0',
+                                        image_shape=(540, 720)
+                                    )
+                                    prefilter_warmed_up = True
+                                    print(f"✅ Prefilter loaded (TinyCNN - ~2500 FPS)")
+                                except Exception as e:
+                                    print(f"❌ Failed to load prefilter: {e}")
+                                    prefilter_enabled = False
+                                    prefilter_model = None
+                            else:
+                                print(f"❌ Prefilter not found: {prefilter_path}")
+                                prefilter_enabled = False
+
+                    elif detection_enabled and not YOLO_AVAILABLE:
+                        print(f"❌ Cannot enable detection - ultralytics not available")
+                        detection_enabled = False
+
+                    response = {
+                        "status": "ok",
+                        "detection": detection_enabled,
+                        "conf": confidence_threshold,
+                        "model": model_path,
+                        "yolo_available": YOLO_AVAILABLE,
+                        "model_loaded": model is not None,
+                        "needs_warmup": model is not None and not model_warmed_up,
+                        "prefilter_enabled": prefilter_enabled,
+                        "prefilter_loaded": prefilter_model is not None
+                    }
+
+                    control_rep.send_json(response)
+
+                    print(f"\n📤 Response sent to GUI:")
+                    print(f"  Detection: {detection_enabled}")
+                    print(f"  Model loaded: {model is not None}")
+                    print(f"  Needs warmup: {model is not None and not model_warmed_up}")
+                    print(f"{'='*60}\n")
+
+                elif cmd == "start_recording":
+                    folder = msg.get("folder", "data/recordings")
+                    count = msg.get("count", 100)
+                    fast_mode = msg.get("fast_mode", False)
+                    pct = msg.get("save_percentage", 1.0)  # Default: save all frames
+
+                    with recording_lock:
+                        if recording:
+                            control_rep.send_json({"status": "error", "message": "Already recording"})
+                            print(f"⚠️ Recording already in progress")
+                        else:
+                            # Use folder as-is (GUI already includes dataset name)
+                            output_folder = Path(folder)
+                            # Create images and labels subfolders (matching existing structure)
+                            images_folder = output_folder / "images"
+                            labels_folder = output_folder / "labels"
+                            images_folder.mkdir(parents=True, exist_ok=True)
+                            labels_folder.mkdir(parents=True, exist_ok=True)
+
+                            # Initialize recording state
+                            recording = True
+                            recording_folder = str(images_folder)  # Save images to images/ subfolder
+                            recording_target_count = count
+                            recording_frame_counter = 0
+                            recording_start_time = time.time()
+                            fast_recording_mode = fast_mode
+
+                            # Calculate save window (first batch)
+                            save_percentage = max(0.01, min(1.0, pct))  # Clamp to 1%-100%
+                            frames_to_save = int(count * save_percentage)
+                            save_start = 0
+                            save_end = frames_to_save
+                            saved_frame_counter = 0
+
+                            # Note: CONFLATE is already disabled (0) for buffered FIFO mode
+                            if fast_mode:
+                                print(f"⚡ Fast recording mode - all frames will be captured")
+
+                            # Start writer threads (images in images/, metadata CSV in parent)
+                            initialize_recording_threads(str(images_folder), str(output_folder))
+
+                            control_rep.send_json({
+                                "status": "started",
+                                "folder": str(output_folder),  # Return parent folder to GUI
+                                "target_count": count,
+                                "fast_mode": fast_mode,
+                                "save_percentage": save_percentage,
+                                "save_window": [save_start, save_end]
+                            })
+                            print(f"\n{'='*60}")
+                            print(f"🔴 RECORDING STARTED {'(FAST MODE)' if fast_mode else ''}")
+                            print(f"{'='*60}")
+                            print(f"  Dataset folder: {output_folder}")
+                            print(f"  Images folder: {images_folder}")
+                            print(f"  Labels folder: {labels_folder}")
+                            print(f"  Target frames: {count}")
+                            print(f"  Save percentage: {save_percentage*100:.0f}% (frames {save_start}-{save_end-1})")
+                            print(f"  Fast mode: {fast_mode}")
+                            print(f"  Writer threads: {NUM_WRITER_THREADS}")
+                            print(f"{'='*60}\n")
+
+                elif cmd == "stop_recording":
+                    with recording_lock:
+                        if not recording:
+                            control_rep.send_json({"status": "error", "message": "Not recording"})
+                            print(f"⚠️ Not currently recording")
+                        else:
+                            # Stop recording
+                            was_fast_mode = fast_recording_mode
+                            recording = False
+                            fast_recording_mode = False
+                            elapsed_time = time.time() - recording_start_time
+                            frames_saved = recording_frame_counter
+
+                            # Note: CONFLATE stays at 0 for buffered FIFO mode
+
+                            # Stop writer threads
+                            stop_recording_threads()
+
+                            control_rep.send_json({
+                                "status": "stopped",
+                                "frames_saved": frames_saved,
+                                "elapsed_time": elapsed_time,
+                                "folder": recording_folder,
+                                "was_fast_mode": was_fast_mode
+                            })
+                            print(f"\n{'='*60}")
+                            print(f"⏹️ RECORDING STOPPED {'(was FAST MODE)' if was_fast_mode else ''}")
+                            print(f"{'='*60}")
+                            print(f"  Frames saved: {frames_saved}/{recording_target_count}")
+                            print(f"  Elapsed time: {elapsed_time:.2f}s")
+                            print(f"  Average FPS: {frames_saved/elapsed_time:.1f}")
+                            print(f"  Folder: {recording_folder}")
+                            print(f"{'='*60}\n")
+
+                elif cmd == "recording_status":
+                    # Return current recording status for polling
+                    with recording_lock:
+                        reply = {
+                            "status": "ok",
+                            "recording": recording,
+                            "frames_recorded": recording_frame_counter,
+                            "target_count": recording_target_count,
+                            "complete": recording_frame_counter >= recording_target_count if recording else False
+                        }
+                    control_rep.send_json(reply)
+
+                elif cmd == "get_detection_summary":
+                    # Return detection counts by class (for Full Test results)
+                    prefilter_total = prefilter_pass_count + prefilter_skip_count
+                    reply = {
+                        "status": "ok",
+                        "detections": {
+                            "total": total_detection_count,
+                            "by_class": detection_counts_by_class.copy()
+                        },
+                        "prefilter": {
+                            "enabled": prefilter_enabled,
+                            "passed": prefilter_pass_count,
+                            "skipped": prefilter_skip_count,
+                            "total": prefilter_total,
+                            "pass_rate": (prefilter_pass_count / prefilter_total * 100) if prefilter_total > 0 else 0.0
+                        }
+                    }
+                    control_rep.send_json(reply)
+                    print(f"📊 Detection summary: {total_detection_count} total, by class: {detection_counts_by_class}")
+                    if prefilter_enabled:
+                        print(f"   Prefilter: {prefilter_pass_count} passed, {prefilter_skip_count} skipped ({reply['prefilter']['pass_rate']:.1f}% pass rate)")
+
+                elif cmd == "reset_detection_counts":
+                    # Reset detection counts (called at start of Full Test)
+                    detection_counts_by_class.clear()
+                    total_detection_count = 0
+                    prefilter_skip_count = 0
+                    prefilter_pass_count = 0
+                    control_rep.send_json({"status": "ok"})
+                    print(f"🔄 Detection counts reset (including prefilter stats)")
+
+                elif cmd == "process_folder":
+                    # Post-process saved images: enhancement + detection + labels
+                    folder = msg.get("folder")
+                    proc_confidence = msg.get("conf", confidence_threshold)
+                    run_enhancement = msg.get("enhancement", True)
+                    save_enhanced = msg.get("save_enhanced", True)
+
+                    print(f"\n{'='*60}")
+                    print(f"📁 POST-PROCESSING FOLDER")
+                    print(f"{'='*60}")
+                    print(f"  Folder: {folder}")
+                    print(f"  Enhancement: {run_enhancement}")
+                    print(f"  Save enhanced: {save_enhanced}")
+                    print(f"  Confidence: {proc_confidence}")
+
+                    base_folder = Path(folder)
+                    images_folder = base_folder / "images"
+                    labels_folder = base_folder / "labels"
+                    enhanced_folder = base_folder / "images_enhanced"
+
+                    # Create enhanced folder if saving
+                    if save_enhanced and run_enhancement:
+                        enhanced_folder.mkdir(parents=True, exist_ok=True)
+
+                    # Reset detection counts
+                    detection_counts_by_class.clear()
+                    total_detection_count = 0
+
+                    # Get list of images
+                    image_files = sorted(images_folder.glob("*.jpg"))
+                    total_images = len(image_files)
+                    print(f"  Found {total_images} images to process")
+                    print(f"{'='*60}\n")
+
+                    # Note: We process synchronously and send a single response
+                    # Progress updates go via status_pub
+
+                    # Create local enhancer for batch processing
+                    batch_enhancer = MovingWindowEnhancer(window_size=20) if run_enhancement else None
+
+                    # Process each image
+                    for i, img_path in enumerate(image_files):
+                        try:
+                            # Load image
+                            frame = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+                            if frame is None:
+                                print(f"⚠️ Failed to load: {img_path.name}")
+                                continue
+
+                            # Convert to tensor
+                            tensor_img = torch.from_numpy(frame).float().cuda() / 255.0
+
+                            # Enhancement (optional)
+                            if run_enhancement and batch_enhancer is not None:
+                                if save_enhanced:
+                                    # Need uint8 for saving
+                                    enhanced_tensor = batch_enhancer.enhance(tensor_img)
+                                    enhanced_frame = enhanced_tensor.cpu().numpy()
+                                    enhanced_path = enhanced_folder / img_path.name
+                                    cv2.imwrite(str(enhanced_path), enhanced_frame)
+                                    tensor_img = enhanced_tensor.float() / 255.0
+                                else:
+                                    # Skip uint8 conversion when not saving
+                                    tensor_img = batch_enhancer.enhance(tensor_img, return_float=True)
+
+                            # Detection (no reconstruction - use enhanced grayscale directly)
+                            if model is not None:
+                                img_h, img_w = tensor_img.shape
+
+                                # Prepare for YOLO: grayscale to 3-channel
+                                model_in = tensor_img.unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
+                                model_in = model_in.expand(-1, 3, -1, -1)  # (1, 3, H, W)
+                                try:
+                                    model_input_size = model.model.args.get("imgsz", 640)
+                                except (AttributeError, TypeError):
+                                    model_input_size = 640  # Default for TensorRT
+                                if isinstance(model_input_size, int):
+                                    model_input_size = (model_input_size, model_input_size)
+
+                                model_in = F.interpolate(
+                                    model_in,
+                                    size=model_input_size,
+                                    mode="bilinear",
+                                    align_corners=False
+                                )
+
+                                # Run inference (TensorRT handles FP16 internally)
+                                with torch.no_grad():
+                                    if using_tensorrt:
+                                        result = model(model_in, conf=proc_confidence, verbose=False)[0]
+                                    else:
+                                        model_in_fp16 = model_in.half()
+                                        result = model(model_in_fp16, conf=proc_confidence, verbose=False, device="cuda", half=True)[0]
+
+                                # Process detections
+                                boxes = result.boxes
+                                if boxes is not None and boxes.data.numel() > 0:
+                                    orig_h, orig_w = frame.shape[:2]
+                                    model_h, model_w = model_input_size
+
+                                    current_boxes = []
+                                    current_boxes_with_class = []
+                                    for box in boxes.data:
+                                        x1, y1, x2, y2, conf, cls = box.cpu().numpy()
+                                        x1 = x1 * orig_w / model_w
+                                        x2 = x2 * orig_w / model_w
+                                        y1 = y1 * orig_h / model_h
+                                        y2 = y2 * orig_h / model_h
+
+                                        if (0 <= x1 < orig_w and 0 <= y1 < orig_h and
+                                            0 <= x2 < orig_w and 0 <= y2 < orig_h and
+                                            conf >= proc_confidence):
+                                            current_boxes.append([x1, y1, x2, y2])
+                                            current_boxes_with_class.append((x1, y1, x2, y2, int(cls)))
+
+                                    # Filter detections
+                                    filtered_boxes = laser_filter.update_and_filter(current_boxes)
+                                    filtered_set = set(tuple(box) for box in filtered_boxes)
+
+                                    # Count by class and save labels
+                                    if len(filtered_set) > 0:
+                                        yolo_lines = []
+                                        for x1, y1, x2, y2, cls_id in current_boxes_with_class:
+                                            if (x1, y1, x2, y2) in filtered_set:
+                                                class_name = result.names.get(cls_id, f"class_{cls_id}")
+                                                detection_counts_by_class[class_name] = detection_counts_by_class.get(class_name, 0) + 1
+
+                                                # YOLO format label
+                                                center_x = ((x1 + x2) / 2) / orig_w
+                                                center_y = ((y1 + y2) / 2) / orig_h
+                                                box_width = (x2 - x1) / orig_w
+                                                box_height = (y2 - y1) / orig_h
+                                                yolo_lines.append(f"{cls_id} {center_x:.6f} {center_y:.6f} {box_width:.6f} {box_height:.6f}")
+
+                                        total_detection_count += len(filtered_boxes)
+
+                                        # Save YOLO label
+                                        if yolo_lines:
+                                            label_path = labels_folder / img_path.name.replace('.jpg', '.txt')
+                                            with open(label_path, 'w') as f:
+                                                f.write('\n'.join(yolo_lines))
+
+                            # Progress update
+                            if (i + 1) % 50 == 0 or (i + 1) == total_images:
+                                print(f"📁 Post-processing: {i + 1}/{total_images} frames, {total_detection_count} detections")
+                                status_pub.send_json({
+                                    "post_process_progress": i + 1,
+                                    "post_process_total": total_images
+                                })
+
+                        except Exception as e:
+                            print(f"⚠️ Error processing {img_path.name}: {e}")
+                            continue
+
+                    print(f"\n{'='*60}")
+                    print(f"✅ POST-PROCESSING COMPLETE")
+                    print(f"{'='*60}")
+                    print(f"  Images processed: {total_images}")
+                    print(f"  Total detections: {total_detection_count}")
+                    print(f"  By class: {detection_counts_by_class}")
+                    if save_enhanced and run_enhancement:
+                        print(f"  Enhanced saved to: {enhanced_folder}")
+                    print(f"{'='*60}\n")
+
+                    # Return summary - wait for next recv to send this
+                    # Note: This uses a blocking pattern where we expect the GUI to poll
+                    control_rep.send_json({
+                        "status": "complete",
+                        "images_processed": total_images,
+                        "enhanced_saved": save_enhanced and run_enhancement,
+                        "enhanced_folder": str(enhanced_folder) if save_enhanced and run_enhancement else None,
+                        "detections": {
+                            "total": total_detection_count,
+                            "by_class": detection_counts_by_class.copy()
+                        }
+                    })
+
+                else:
+                    control_rep.send_json({"status": "unknown command"})
+
+            # Process camera frames - buffer for FIFO processing (normal mode)
+            # In fast_recording_mode, this buffer isn't used - frames go directly to disk
+
+            # Receive all available frames into buffer (non-blocking)
+            while camera_sub.poll(0):
+                try:
+                    incoming_msg = camera_sub.recv(zmq.NOBLOCK)
+                    if len(incoming_msg) >= 18:
+                        frame_buffer.append(incoming_msg)
+                except zmq.Again:
+                    break
+
+            # Check RAM periodically and drop frames if critical
+            ram_check_counter += 1
+            if ram_check_counter >= RAM_CHECK_INTERVAL:
+                ram_check_counter = 0
+                if check_ram_critical():
+                    # Drop oldest half of buffer to free memory
+                    drop_count = len(frame_buffer) // 2
+                    for _ in range(drop_count):
+                        if frame_buffer:
+                            frame_buffer.popleft()
+                            frames_dropped_ram += 1
+                    if drop_count > 0:
+                        mem = psutil.virtual_memory()
+                        print(f"⚠️  RAM CRITICAL ({mem.percent:.1f}%): Dropped {drop_count} frames, buffer now {len(frame_buffer)}")
+
+            # Get next frame from buffer (FIFO - oldest first)
+            if frame_buffer:
+                msg = frame_buffer.popleft()
+            elif camera_sub.poll(10):  # 10ms timeout if buffer empty
+                msg = camera_sub.recv()
+                if len(msg) < 18:
+                    continue
+            else:
+                continue
+
+            # Parse message: timestamp(8) + frame_id(4) + [h,w,c](6) + image
+            if len(msg) < 18:
+                continue
+
+            timestamp, frame_id = struct.unpack("dI", msg[:12])
+            height, width, channels = np.frombuffer(msg[12:18], dtype=np.uint16)
+            payload = msg[18:]
+
+            # Note: Lag-based dropping removed - now using RAM-based dropping only
+            # Frames are processed FIFO regardless of age
+
+            # Parse frame (make writable copy for PyTorch)
+            if channels == 1:
+                frame = np.frombuffer(payload, dtype=np.uint8).reshape((height, width)).copy()
+            elif channels == 3:
+                frame = np.frombuffer(payload, dtype=np.uint8).reshape((height, width, 3)).copy()
+                # Convert to grayscale for holography
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            else:
+                continue
+
+            # Fast recording mode: skip all processing, just save frames at max speed
+            if recording and fast_recording_mode:
+                with recording_lock:
+                    if recording and recording_frame_counter < recording_target_count:
+                        current_time = time.time()
+                        timestamp_str = datetime.fromtimestamp(current_time).strftime("%Y%m%d_%H%M%S_%f")
+                        filename = f"frame_{recording_frame_counter:06d}_{timestamp_str}.jpg"
+                        filepath = str(Path(recording_folder) / filename)
+
+                        thread_id = recording_frame_counter % NUM_WRITER_THREADS
+                        try:
+                            writer_queues[thread_id].put_nowait((frame.copy(), filepath))
+                            metadata_queue.put_nowait((recording_frame_counter, current_time, timestamp_str, filename))
+                            recording_frame_counter += 1
+
+                            if recording_frame_counter % 100 == 0:
+                                print(f"⚡ Fast recording: {recording_frame_counter}/{recording_target_count}")
+
+                            # Auto-stop when target reached
+                            if recording_frame_counter >= recording_target_count:
+                                recording = False
+                                fast_recording_mode = False
+                                # Note: CONFLATE stays at 0 for buffered FIFO mode
+                                elapsed = time.time() - recording_start_time
+                                print(f"\n{'='*60}")
+                                print(f"✅ FAST RECORDING COMPLETE")
+                                print(f"{'='*60}")
+                                print(f"  Frames: {recording_frame_counter}")
+                                print(f"  Time: {elapsed:.2f}s")
+                                print(f"  FPS: {recording_frame_counter/elapsed:.1f}")
+                                print(f"{'='*60}\n")
+                                stop_recording_threads()
+
+                        except queue.Full:
+                            print(f"⚠️ Fast recording: queue {thread_id} full, frame dropped")
+
+                # Send raw grayscale frame to display
+                meta_header = struct.pack("dI", time.time(), frame_count)
+                meta = np.array([height, width, 1], dtype=np.uint16).tobytes()
+                processed_pub.send(meta_header + meta + frame.tobytes())
+                frame_count += 1
+                continue  # Skip normal processing
+
+            # Profiling: start timing
+            if profiling_enabled and recording:
+                torch.cuda.synchronize()
+                t_loop_start = time.time()
+
+            # Convert to tensor (float, range [0, 1]) using pre-allocated buffer
+            global gpu_input_buffer
+            frame_shape = frame.shape
+            if gpu_input_buffer is None or gpu_input_buffer.shape != frame_shape:
+                gpu_input_buffer = torch.empty(frame_shape, dtype=torch.float32, device='cuda')
+            gpu_input_buffer.copy_(torch.from_numpy(frame), non_blocking=True)
+            gpu_input_buffer.mul_(1.0 / 255.0)  # in-place normalize (mul faster than div)
+            tensor_img = gpu_input_buffer
+
+            if profiling_enabled and recording:
+                torch.cuda.synchronize()
+                t_to_gpu = time.time()
+
+            # Reset frame_raw each iteration to prevent stale data when detection is off
+            frame_raw = None
+
+            # Apply enhancement if enabled
+            if enhancement_enabled:
+                tensor_shape = tensor_img.shape
+                if enhancer is None or current_shape != tensor_shape:
+                    enhancer = MovingWindowEnhancer(window_size=20)
+                    current_shape = tensor_shape
+                    print(f"🔧 Initialized enhancer for shape {tensor_shape}")
+
+                # Enhance frame (returns float [0,1] directly to avoid uint8 round-trip)
+                tensor_img = enhancer.enhance(tensor_img, return_float=True)
+
+            if profiling_enabled and recording:
+                torch.cuda.synchronize()
+                t_enhance = time.time()
+
+            # Initialize profiling variables for all stages
+            t_prefilter = t_model_prep = t_inference = t_postprocess = None
+            t_to_cpu = t_status = t_queue = None
+
+            # Run detection if enabled
+            if detection_enabled and model is not None:
+                t_start = time.time()
+
+                # Clear detection variables at start of each frame to prevent stale data
+                filtered_set = set()
+                current_boxes_with_class = []
+                frame_raw = None  # Will hold raw frame without boxes for recording
+
+                # Prefilter check - skip expensive processing if no particles detected
+                if prefilter_enabled and prefilter_model is not None:
+                    # TinyCNN BackgroundFilter takes grayscale directly at native resolution
+                    # tensor_img is (H, W) float [0, 1] on GPU
+                    particles_prob = prefilter_model.get_probability(tensor_img)
+
+                    # Debug: log probability periodically
+                    if frame_count % 100 == 0:
+                        print(f"  🔬 Prefilter prob: {particles_prob:.4f} | Threshold: {prefilter_threshold}")
+
+                    if particles_prob < prefilter_threshold:
+                        # No particles - skip reconstruction and detection
+                        prefilter_skip_count += 1
+
+                        if not performance_mode and frame_count % 100 == 0:
+                            pass_rate = prefilter_pass_count / (prefilter_pass_count + prefilter_skip_count) * 100 if (prefilter_pass_count + prefilter_skip_count) > 0 else 0
+                            print(f"  ⏭️ Prefilter: skipped (prob={particles_prob:.4f} < {prefilter_threshold}) | Pass rate: {pass_rate:.1f}%")
+
+                        # Send the frame without detection, publish status with pipeline FPS
+                        frame_uint8 = (tensor_img * 255).clamp(0, 255).to(torch.uint8).cpu().numpy()
+                        send_frame = frame_uint8
+
+                        # Calculate pipeline FPS for prefilter-only path
+                        total_time = time.time() - t_start
+                        pipeline_times.append(total_time)
+                        if len(pipeline_times) > PIPELINE_FPS_WINDOW:
+                            pipeline_times.pop(0)
+                        avg_time = sum(pipeline_times) / len(pipeline_times)
+                        pipeline_fps = 1.0 / avg_time if avg_time > 0 else 0.0
+
+                        status_pub.send_json({"particle_count": total_particle_count, "pipeline_fps": pipeline_fps})
+
+                        # Handle recording even when prefilter skips detection
+                        if recording and recording_frame_counter < recording_target_count:
+                            current_time = time.time()
+                            timestamp_str = datetime.fromtimestamp(current_time).strftime("%Y%m%d_%H%M%S_%f")
+                            filename = f"frame_{recording_frame_counter:06d}_{timestamp_str}.jpg"
+                            filepath = str(Path(recording_folder) / filename)
+
+                            should_save = (save_start <= recording_frame_counter < save_end)
+                            if should_save:
+                                thread_id = saved_frame_counter % NUM_WRITER_THREADS
+                                try:
+                                    writer_queues[thread_id].put_nowait((send_frame.copy(), filepath))
+                                    metadata_queue.put_nowait((recording_frame_counter, current_time, timestamp_str, filename))
+                                    saved_frame_counter += 1
+                                except queue.Full:
+                                    print(f"⚠️ Prefilter recording: queue full, frame dropped")
+
+                            recording_frame_counter += 1
+
+                            # Publish progress
+                            if recording_frame_counter % 10 == 0:
+                                status_pub.send_json({
+                                    "recording_progress": recording_frame_counter,
+                                    "recording_target": recording_target_count,
+                                    "frames_saved": saved_frame_counter
+                                })
+
+                            # Check for auto-stop
+                            if recording_frame_counter >= recording_target_count:
+                                recording = False
+                                elapsed_time = time.time() - recording_start_time
+                                print(f"\n{'='*60}")
+                                print(f"✅ RECORDING TARGET REACHED (prefilter path)")
+                                print(f"{'='*60}")
+                                print(f"  Frames processed: {recording_frame_counter}")
+                                print(f"  Frames saved: {saved_frame_counter}")
+                                print(f"{'='*60}\n")
+                                stop_recording_threads()
+                                status_pub.send_json({
+                                    "recording_complete": True,
+                                    "frames_processed": recording_frame_counter,
+                                    "frames_saved": saved_frame_counter,
+                                    "save_percentage": save_percentage,
+                                    "elapsed_time": elapsed_time,
+                                    "folder": recording_folder
+                                })
+
+                        # Skip to frame sending (jump past detection block)
+                        # We need to handle frame sending here since we're skipping the detection
+                        height, width = send_frame.shape[:2]
+                        channels = send_frame.shape[2] if len(send_frame.shape) > 2 else 1
+                        meta_header = struct.pack("dI", time.time(), frame_count)
+                        meta = np.array([height, width, channels], dtype=np.uint16).tobytes()
+                        processed_pub.send(meta_header + meta + send_frame.tobytes())
+                        frame_count += 1
+                        continue  # Skip to next frame
+
+                    else:
+                        # Particles detected - continue with full pipeline
+                        prefilter_pass_count += 1
+                        if not performance_mode and frame_count % 100 == 0:
+                            pass_rate = prefilter_pass_count / (prefilter_pass_count + prefilter_skip_count) * 100 if (prefilter_pass_count + prefilter_skip_count) > 0 else 0
+                            print(f"  ✅ Prefilter: passed (prob={particles_prob:.4f} >= {prefilter_threshold}) | Pass rate: {pass_rate:.1f}%")
+
+                    if profiling_enabled and recording:
+                        torch.cuda.synchronize()
+                        t_prefilter = time.time()
+
+                # Prepare for YOLO: convert grayscale to 3-channel (matching manual detection)
+                # tensor_img is (H, W) float [0, 1]
+                img_h, img_w = tensor_img.shape
+
+                # Stack grayscale to 3 channels: (H, W) -> (1, 3, H, W)
+                model_in = tensor_img.unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
+                model_in = model_in.expand(-1, 3, -1, -1)  # (1, 3, H, W)
+
+                # Resize to model input size
+                try:
+                    model_input_size = model.model.args.get("imgsz", 640)
+                except (AttributeError, TypeError):
+                    model_input_size = 640  # Default for TensorRT
+                if isinstance(model_input_size, int):
+                    model_input_size = (model_input_size, model_input_size)
+
+                model_in = F.interpolate(
+                    model_in,
+                    size=model_input_size,
+                    mode="bilinear",
+                    align_corners=False
+                )
+
+                if profiling_enabled and recording:
+                    torch.cuda.synchronize()
+                    t_model_prep = time.time()
+
+                # Run inference
+                with torch.no_grad():
+                    # Warmup model on first detection
+                    if not model_warmed_up:
+                        print(f"\n{'='*60}")
+                        print(f"⚙️  WARMUP PHASE - First Detection")
+                        print(f"{'='*60}")
+                        print(f"  Model input shape: {model_in.shape}")
+                        print(f"  Device: {model_in.device}")
+                        print(f"  Dtype: {model_in.dtype}")
+                        print(f"\n  Running first inference (may take 10-20 seconds)...")
+                        print(f"  This initializes CUDA kernels and allocates GPU memory.")
+                        print(f"  The GUI will freeze temporarily - this is normal!")
+
+                        t_warmup = time.time()
+                        _ = model(model_in, conf=confidence_threshold, verbose=False, device="cuda")
+                        warmup_time = time.time() - t_warmup
+
+                        model_warmed_up = True
+
+                        # Flush stale frames
+                        flushed = 0
+                        while camera_sub.poll(0):
+                            _ = camera_sub.recv(zmq.NOBLOCK)
+                            flushed += 1
+
+                        print(f"\n✅ WARMUP COMPLETE!")
+                        print(f"  Warmup took: {warmup_time:.2f}s")
+                        print(f"  Flushed {flushed} stale frames from buffer")
+                        print(f"  Next frames will be processed at full speed (~10ms/frame)")
+                        print(f"{'='*60}\n")
+
+                        # If recording, we need to count this frame even though we skip detection
+                        if recording and recording_frame_counter < recording_target_count:
+                            # Create basic grayscale frame for recording (no detection boxes)
+                            frame_uint8 = (tensor_img * 255).clamp(0, 255).to(torch.uint8).cpu().numpy()
+                            send_frame = frame_uint8
+
+                            # Use the recording block logic inline
+                            current_time = time.time()
+                            timestamp_str = datetime.fromtimestamp(current_time).strftime("%Y%m%d_%H%M%S_%f")
+                            filename = f"frame_{recording_frame_counter:06d}_{timestamp_str}.jpg"
+                            filepath = str(Path(recording_folder) / filename)
+
+                            should_save = (save_start <= recording_frame_counter < save_end)
+                            if should_save:
+                                thread_id = saved_frame_counter % NUM_WRITER_THREADS
+                                try:
+                                    writer_queues[thread_id].put_nowait((send_frame.copy(), filepath))
+                                    metadata_queue.put_nowait((recording_frame_counter, current_time, timestamp_str, filename))
+                                    saved_frame_counter += 1
+                                except queue.Full:
+                                    print(f"⚠️ Warmup recording: queue full, frame dropped")
+
+                            recording_frame_counter += 1
+
+                            # Publish progress
+                            if recording_frame_counter % 10 == 0:
+                                status_pub.send_json({
+                                    "recording_progress": recording_frame_counter,
+                                    "recording_target": recording_target_count,
+                                    "frames_saved": saved_frame_counter
+                                })
+
+                        continue  # Skip rest of detection processing for warmup frame
+
+                    # Real inference (TensorRT handles FP16 internally)
+                    t_infer = time.time()
+                    if using_tensorrt:
+                        result = model(model_in, conf=confidence_threshold, verbose=False)[0]
+                    else:
+                        # Use half precision for faster inference with PyTorch model
+                        model_in_fp16 = model_in.half()
+                        result = model(model_in_fp16, conf=confidence_threshold, verbose=False, device="cuda", half=True)[0]
+                    t_infer_elapsed = time.time() - t_infer
+
+                    if not performance_mode and frame_count % 30 == 0:
+                        print(f"  🎯 YOLO inference took: {t_infer_elapsed*1000:.1f}ms")
+
+                    if profiling_enabled and recording:
+                        torch.cuda.synchronize()
+                        t_inference = time.time()
+
+                # Convert tensor to BGR image for drawing boxes
+                frame_bgr = (tensor_img * 255).clamp(0, 255).to(torch.uint8).cpu().numpy()
+                frame_bgr = cv2.cvtColor(frame_bgr, cv2.COLOR_GRAY2BGR)
+
+                # Keep a copy without boxes for recording (Full Test saves raw frames)
+                frame_raw = frame_bgr.copy()
+
+                # Extract and filter detections
+                boxes = result.boxes
+                if boxes is not None and boxes.data.numel() > 0:
+                    orig_h, orig_w = frame_bgr.shape[:2]
+                    model_h, model_w = model_input_size
+
+                    # Extract boxes and scale to original size (with class info)
+                    current_boxes = []
+                    current_boxes_with_class = []  # [(x1, y1, x2, y2, class_id), ...]
+                    for box in boxes.data:
+                        x1, y1, x2, y2, conf, cls = box.cpu().numpy()
+
+                        # Scale from model size to original size
+                        x1 = x1 * orig_w / model_w
+                        x2 = x2 * orig_w / model_w
+                        y1 = y1 * orig_h / model_h
+                        y2 = y2 * orig_h / model_h
+
+                        # Validate coordinates
+                        if (0 <= x1 < orig_w and 0 <= y1 < orig_h and
+                            0 <= x2 < orig_w and 0 <= y2 < orig_h and
+                            conf >= confidence_threshold):
+                            current_boxes.append([x1, y1, x2, y2])
+                            current_boxes_with_class.append((x1, y1, x2, y2, int(cls)))
+
+                    # Filter out laser spots
+                    t_filter = time.time()
+                    filtered_boxes = laser_filter.update_and_filter(current_boxes)
+                    t_filter_elapsed = time.time() - t_filter
+
+                    # Find which boxes passed the filter (by matching coordinates)
+                    filtered_set = set(tuple(box) for box in filtered_boxes)
+
+                    # Draw filtered boxes and count by class
+                    frame_class_counts = {}  # class_name -> count for this frame
+                    for x1, y1, x2, y2, cls_id in current_boxes_with_class:
+                        if (x1, y1, x2, y2) in filtered_set:
+                            # Get class name from model
+                            class_name = result.names.get(cls_id, f"class_{cls_id}")
+
+                            # Count by class for Full Test summary
+                            detection_counts_by_class[class_name] = detection_counts_by_class.get(class_name, 0) + 1
+                            frame_class_counts[class_name] = frame_class_counts.get(class_name, 0) + 1
+
+                            cv2.rectangle(
+                                frame_bgr,
+                                (int(x1), int(y1)),
+                                (int(x2), int(y2)),
+                                (0, 255, 0),  # Green boxes
+                                2
+                            )
+                            cv2.putText(
+                                frame_bgr,
+                                class_name,
+                                (int(x1), int(y1) - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                (0, 255, 0),
+                                1
+                            )
+
+                    # Add to cumulative totals
+                    total_particle_count += len(filtered_boxes)
+                    total_detection_count += len(filtered_boxes)
+
+                    # Calculate pipeline FPS (rolling average)
+                    total_time = time.time() - t_start
+                    pipeline_times.append(total_time)
+                    if len(pipeline_times) > PIPELINE_FPS_WINDOW:
+                        pipeline_times.pop(0)
+                    avg_time = sum(pipeline_times) / len(pipeline_times)
+                    pipeline_fps = 1.0 / avg_time if avg_time > 0 else 0.0
+
+                    # Publish cumulative detection count and pipeline FPS
+                    status_pub.send_json({"particle_count": total_particle_count, "pipeline_fps": pipeline_fps})
+
+                    # Log detection count (only when performance_mode is off)
+                    if not performance_mode and frame_count % 30 == 0:  # Every 30 frames
+                        drop_rate = (dropped_frames / (frame_count + dropped_frames) * 100) if (frame_count + dropped_frames) > 0 else 0
+                        mem = psutil.virtual_memory()
+                        print(f"  🎯 Detections: {len(current_boxes)} → {len(filtered_boxes)} (filtered) | Total: {total_particle_count}")
+                        print(f"  🚀 Pipeline: {total_time*1000:.1f}ms ({pipeline_fps:.1f} FPS) | Dropped frames: {dropped_frames} ({drop_rate:.1f}%)")
+                        print(f"  📊 Buffer: {len(frame_buffer)} frames | RAM: {mem.percent:.1f}% | Dropped (RAM): {frames_dropped_ram}")
+                else:
+                    # No detections this frame, but still publish cumulative total
+                    # Calculate pipeline FPS (rolling average)
+                    total_time = time.time() - t_start
+                    pipeline_times.append(total_time)
+                    if len(pipeline_times) > PIPELINE_FPS_WINDOW:
+                        pipeline_times.pop(0)
+                    avg_time = sum(pipeline_times) / len(pipeline_times)
+                    pipeline_fps = 1.0 / avg_time if avg_time > 0 else 0.0
+
+                    status_pub.send_json({"particle_count": total_particle_count, "pipeline_fps": pipeline_fps})
+
+                    if not performance_mode and frame_count % 30 == 0:
+                        print(f"  ℹ️  No detections above threshold {confidence_threshold}")
+
+                if profiling_enabled and recording:
+                    t_postprocess = time.time()
+
+                # Use BGR frame with boxes
+                send_frame = frame_bgr
+
+            else:
+                # No detection: send grayscale or enhanced frame
+                frame_uint8 = (tensor_img * 255).clamp(0, 255).to(torch.uint8).cpu().numpy()
+                send_frame = frame_uint8
+
+                if profiling_enabled and recording:
+                    t_to_cpu = time.time()
+
+                # Publish total count (will be 0 if detection never enabled)
+                # pipeline_fps is 0 when detection is off
+                status_pub.send_json({"particle_count": total_particle_count, "pipeline_fps": 0.0})
+
+                if profiling_enabled and recording:
+                    t_status = time.time()
+
+            # Save frame if recording is enabled
+            if recording and recording_frame_counter < recording_target_count:
+                try:
+                    # Generate timestamp with microsecond precision
+                    current_time = time.time()
+                    timestamp_str = datetime.fromtimestamp(current_time).strftime("%Y%m%d_%H%M%S_%f")
+
+                    # Create filename: frame_NNNNNN_timestamp.jpg
+                    filename = f"frame_{recording_frame_counter:06d}_{timestamp_str}.jpg"
+                    filepath = str(Path(recording_folder) / filename)
+
+                    # Check if this frame is within the save window (first batch)
+                    should_save = (save_start <= recording_frame_counter < save_end)
+
+                    # Try to queue the frame (non-blocking) if within save window
+                    try:
+                        if should_save:
+                            # Round-robin distribute frames to writer threads
+                            thread_id = saved_frame_counter % NUM_WRITER_THREADS
+                            writer_queue = writer_queues[thread_id]
+
+                            # Save raw frame without bounding boxes (use frame_raw if available)
+                            save_frame = frame_raw if frame_raw is not None else send_frame
+                            writer_queue.put_nowait((save_frame.copy(), filepath))
+
+                            if profiling_enabled:
+                                t_queue = time.time()
+
+                            # Queue metadata for CSV
+                            metadata_queue.put_nowait((
+                                recording_frame_counter,
+                                current_time,
+                                timestamp_str,
+                                filename
+                            ))
+
+                            # Save YOLO format labels if detection is enabled and we have detections
+                            if detection_enabled and len(filtered_set) > 0:
+                                try:
+                                    labels_folder = Path(recording_folder).parent / "labels"
+                                    label_filename = filename.replace('.jpg', '.txt')
+                                    label_filepath = labels_folder / label_filename
+
+                                    orig_h, orig_w = send_frame.shape[:2]
+                                    yolo_lines = []
+
+                                    for x1, y1, x2, y2, cls_id in current_boxes_with_class:
+                                        if (x1, y1, x2, y2) in filtered_set:
+                                            # YOLO format: class_id center_x center_y width height (all normalized 0-1)
+                                            center_x = ((x1 + x2) / 2) / orig_w
+                                            center_y = ((y1 + y2) / 2) / orig_h
+                                            box_width = (x2 - x1) / orig_w
+                                            box_height = (y2 - y1) / orig_h
+                                            yolo_lines.append(f"{cls_id} {center_x:.6f} {center_y:.6f} {box_width:.6f} {box_height:.6f}")
+
+                                    if yolo_lines:
+                                        with open(label_filepath, 'w') as f:
+                                            f.write('\n'.join(yolo_lines))
+                                except Exception as label_err:
+                                    print(f"⚠️ Failed to save label: {label_err}")
+
+                            saved_frame_counter += 1
+
+                        # Always increment frame counter (for progress tracking)
+                        recording_frame_counter += 1
+
+                        # Publish progress to GUI every 10 frames
+                        if recording_frame_counter % 10 == 0 or recording_frame_counter == recording_target_count:
+                            status_pub.send_json({
+                                "recording_progress": recording_frame_counter,
+                                "recording_target": recording_target_count,
+                                "frames_saved": saved_frame_counter
+                            })
+
+                        # Log progress (include save info when within save window)
+                        if recording_frame_counter % 50 == 0 or recording_frame_counter == recording_target_count:
+                            if save_percentage < 1.0:
+                                print(f"📹 Recording: {recording_frame_counter}/{recording_target_count} frames processed, {saved_frame_counter} saved")
+                            else:
+                                print(f"📹 Recording: {recording_frame_counter}/{recording_target_count} frames queued")
+
+                        # Auto-stop when target reached
+                        if recording_frame_counter >= recording_target_count:
+                            recording = False
+                            elapsed_time = time.time() - recording_start_time
+                            print(f"\n{'='*60}")
+                            print(f"✅ RECORDING TARGET REACHED")
+                            print(f"{'='*60}")
+                            print(f"  Frames processed: {recording_frame_counter}")
+                            print(f"  Frames saved: {saved_frame_counter}")
+                            if save_percentage < 1.0:
+                                print(f"  Save window: {save_start}-{save_end-1} ({save_percentage*100:.0f}%)")
+                            print(f"  Elapsed time: {elapsed_time:.2f}s")
+                            print(f"  Average FPS: {recording_frame_counter/elapsed_time:.1f}")
+                            print(f"  Writer threads finishing writes...")
+                            print(f"{'='*60}\n")
+
+                            # Save profiling data to CSV if enabled
+                            if profiling_enabled and profiling_data:
+                                import csv
+                                profiling_csv_path = Path(recording_folder).parent / "profiling_data.csv"
+                                fieldnames = ['frame', 'to_gpu_ms', 'enhance_ms', 'prefilter_ms', 'model_prep_ms', 'inference_ms', 'postprocess_ms', 'to_cpu_ms', 'status_ms', 'queue_ms', 'zmq_send_ms', 'total_ms']
+                                with open(profiling_csv_path, 'w', newline='') as f:
+                                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                                    writer.writeheader()
+                                    writer.writerows(profiling_data)
+
+                                    # Add blank row then summary statistics
+                                    f.write('\n')
+                                    f.write('stage,average_ms\n')
+                                    timing_fields = [fn for fn in fieldnames if fn != 'frame']
+                                    for field in timing_fields:
+                                        values = [row[field] for row in profiling_data if field in row]
+                                        avg = sum(values) / len(values) if values else 0
+                                        f.write(f'{field},{avg:.6f}\n')
+
+                                print(f"📊 Profiling data saved to {profiling_csv_path}")
+                                profiling_data.clear()
+
+                            # Stop writer threads after they finish
+                            stop_recording_threads()
+
+                            # Notify GUI that recording is complete
+                            status_pub.send_json({
+                                "recording_complete": True,
+                                "frames_processed": recording_frame_counter,
+                                "frames_saved": saved_frame_counter,
+                                "save_percentage": save_percentage,
+                                "elapsed_time": elapsed_time,
+                                "folder": recording_folder
+                            })
+
+                    except queue.Full:
+                        print(f"⚠️ Recording queue {thread_id} full - frame dropped")
+
+                except Exception as e:
+                    print(f"❌ Recording error: {e}")
+
+            # Send processed frame
+            height, width = send_frame.shape[:2]
+            channels = send_frame.shape[2] if send_frame.ndim == 3 else 1
+
+            meta_header = struct.pack("dI", time.time(), frame_count)
+            meta = np.array([height, width, channels], dtype=np.uint16).tobytes()
+            payload = send_frame.astype(np.uint8).tobytes()
+
+            processed_pub.send(meta_header + meta + payload)
+            frame_count += 1
+
+            # Profiling: collect timing data
+            if profiling_enabled and recording:
+                t_zmq_send = time.time()
+                if t_queue and t_status:
+                    queue_ms = (t_queue - t_status) * 1000
+                    zmq_base = t_queue
+                else:
+                    queue_ms = 0
+                    zmq_base = t_status if t_status else t_postprocess if t_postprocess else t_enhance
+
+                # Calculate timing for each stage
+                enhance_base = t_to_gpu
+                if detection_enabled:
+                    # Detection path timing
+                    prefilter_ms = (t_prefilter - t_enhance) * 1000 if t_prefilter else 0
+                    model_prep_base = t_prefilter if t_prefilter else t_enhance
+                    model_prep_ms = (t_model_prep - model_prep_base) * 1000 if t_model_prep else 0
+                    inference_ms = (t_inference - t_model_prep) * 1000 if t_inference and t_model_prep else 0
+                    postprocess_ms = (t_postprocess - t_inference) * 1000 if t_postprocess and t_inference else 0
+                    to_cpu_ms = 0  # CPU transfer is included in postprocess for detection path
+                    status_ms = 0  # Status send is included in postprocess for detection path
+                else:
+                    # Non-detection path timing
+                    prefilter_ms = 0
+                    model_prep_ms = 0
+                    inference_ms = 0
+                    postprocess_ms = 0
+                    to_cpu_ms = (t_to_cpu - t_enhance) * 1000 if enhancement_enabled else (t_to_cpu - t_to_gpu) * 1000
+                    status_ms = (t_status - t_to_cpu) * 1000
+
+                profiling_data.append({
+                    'frame': recording_frame_counter - 1,
+                    'to_gpu_ms': (t_to_gpu - t_loop_start) * 1000,
+                    'enhance_ms': (t_enhance - t_to_gpu) * 1000 if enhancement_enabled else 0,
+                    'prefilter_ms': prefilter_ms,
+                    'model_prep_ms': model_prep_ms,
+                    'inference_ms': inference_ms,
+                    'postprocess_ms': postprocess_ms,
+                    'to_cpu_ms': to_cpu_ms,
+                    'status_ms': status_ms,
+                    'queue_ms': queue_ms,
+                    'zmq_send_ms': (t_zmq_send - zmq_base) * 1000,
+                    'total_ms': (t_zmq_send - t_loop_start) * 1000,
+                })
+
+            # Debug output (less frequent in performance mode)
+            log_interval = 5000 if performance_mode else 1000
+            if frame_count % log_interval == 0:
+                fps_estimate = 1000 / (time.time() - timestamp + 0.001)
+                drop_rate = (dropped_frames / (frame_count + dropped_frames) * 100) if (frame_count + dropped_frames) > 0 else 0
+                print(f"📊 Processed: {frame_count} frames | Dropped: {dropped_frames} ({drop_rate:.1f}%) | Est. {fps_estimate:.1f} FPS")
+
+        except KeyboardInterrupt:
+            print("\n👋 Shutting down...")
+            break
+        except Exception as e:
+            print(f"\n{'='*60}")
+            print(f"❌ FATAL ERROR IN MAIN LOOP")
+            print(f"{'='*60}")
+            print(f"Error: {e}")
+            print(f"\nFull traceback:")
+            import traceback
+            traceback.print_exc()
+            print(f"\n{'='*60}")
+            print(f"⏸️  PAUSED - Press Ctrl+C to exit or wait 10 seconds to retry...")
+            print(f"{'='*60}")
+            time.sleep(10)  # Pause so you can read the error
+
+
+if __name__ == "__main__":
+    main()

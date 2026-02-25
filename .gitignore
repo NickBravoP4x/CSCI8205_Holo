@@ -4,6 +4,9 @@ cpp_cuda/build/
 # Large binary packages
 *.deb
 
+# Large data directories
+Data/MA/
+
 # Claude Code
 .claude/
 

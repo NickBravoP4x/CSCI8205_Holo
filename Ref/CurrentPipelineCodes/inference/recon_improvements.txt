@@ -1,0 +1,26 @@
+Optimization Options
+
+  x1. Cache Propagation Filters (Easiest, ~1-2ms savings)
+
+  The Hz_stack is recomputed every frame but only depends on image size and z_list. Cache it once per image dimension.
+
+  3. Reduce Padding (Linear speedup)
+
+  Current: padding=32. Try padding=16 - smaller FFT = faster.
+
+  4. FP16 FFT (~30-50% speedup on Jetson)
+
+  PyTorch FFT supports half precision. Jetson's GPU is optimized for FP16.
+
+  5. Skip/Simplify Normalization (~0.5-1ms savings)
+
+  Replace dynamic min/max/mean with fixed scaling (we tried this before - needs careful tuning).
+
+  6. Reduce Planes (Linear speedup)
+
+  Use 2 planes instead of 3, duplicate one for RGB.
+
+  7. Optimize FFT Size (Variable)
+
+  Pad to power-of-2 dimensions for fastest cuFFT performance.
+

@@ -1,0 +1,109 @@
+{
+  "system_info": {
+    "cpu": "x86_64",
+    "gpu": "",
+    "pytorch_version": "2.10.0+cu130",
+    "cuda_version": "13.0",
+    "python_version": "3.11.14"
+  },
+  "config": {
+    "num_images": 100,
+    "num_timed": 95,
+    "data_dir": "Data/MA/run1",
+    "heatmap_model": "fast_bacteria_hm_optimized.pt",
+    "classifier_model": "bacteria_class.pt",
+    "device": "cpu",
+    "ema_alpha": 0.05,
+    "ema_warmup": 5,
+    "peak_threshold": 0.3,
+    "topk": 50,
+    "classification_threshold": 0.25
+  },
+  "stage_statistics": {
+    "stage1_load": {
+      "mean_ms": 5.744533736840726,
+      "median_ms": 5.649767000022621,
+      "std_ms": 0.632029701853545,
+      "min_ms": 4.924214000027405,
+      "max_ms": 9.157267999967189,
+      "p95_ms": 6.742003499988414,
+      "p99_ms": 7.817029159995176,
+      "throughput_fps": 174.07853201154003,
+      "num_samples": 95
+    },
+    "stage2_ema": {
+      "mean_ms": 0.3295050105233905,
+      "median_ms": 0.3027850000307808,
+      "std_ms": 0.24044500115213618,
+      "min_ms": 0.19466300000203773,
+      "max_ms": 2.5729939999905582,
+      "p95_ms": 0.4218594000292341,
+      "p99_ms": 0.614290619978424,
+      "throughput_fps": 3034.855216348867,
+      "num_samples": 95
+    },
+    "stage3_holographic": {
+      "mean_ms": 8.23741127368533,
+      "median_ms": 8.060867999972743,
+      "std_ms": 1.1893821051144813,
+      "min_ms": 5.806121999967218,
+      "max_ms": 12.250015000006442,
+      "p95_ms": 10.679254100011804,
+      "p99_ms": 11.662871260019758,
+      "throughput_fps": 121.39736220219227,
+      "num_samples": 95
+    },
+    "stage4_detect": {
+      "mean_ms": 12.173387726315205,
+      "median_ms": 12.237015999971845,
+      "std_ms": 1.6034367459005752,
+      "min_ms": 7.829318999995394,
+      "max_ms": 19.11208799998576,
+      "p95_ms": 14.186421700003393,
+      "p99_ms": 14.994487560028357,
+      "throughput_fps": 82.14640184657065,
+      "num_samples": 95
+    },
+    "stage5_classify": {
+      "mean_ms": 22.524037263157854,
+      "median_ms": 22.682013000007828,
+      "std_ms": 13.884529065784168,
+      "min_ms": 0.0006910000251991733,
+      "max_ms": 42.63961300000574,
+      "p95_ms": 40.19628699999771,
+      "p99_ms": 41.87506024000413,
+      "throughput_fps": 44.39701410171618,
+      "num_samples": 95
+    },
+    "stage6_postprocess": {
+      "mean_ms": 0.3016943052641277,
+      "median_ms": 0.28034199999638076,
+      "std_ms": 0.1712963498526524,
+      "min_ms": 0.0022530000478582224,
+      "max_ms": 1.0006470000121226,
+      "p95_ms": 0.5427931000099305,
+      "p99_ms": 0.7469353599856283,
+      "throughput_fps": 3314.613443314811,
+      "num_samples": 95
+    }
+  },
+  "end_to_end": {
+    "mean_ms": 49.31056931578664,
+    "median_ms": 48.62948200008077,
+    "std_ms": 14.314592428298488,
+    "min_ms": 25.747570000078213,
+    "max_ms": 70.70161700005428,
+    "p95_ms": 67.66012780001915,
+    "p99_ms": 70.38822757999583,
+    "throughput_fps": 20.279627955539603,
+    "wall_clock_seconds": 4.92640109599995
+  },
+  "gpu_memory": {},
+  "detection_summary": {
+    "total_detections": 2489,
+    "total_filtered": 1218,
+    "images_with_detections": 89,
+    "pd_count": 1218,
+    "ec_count": 0
+  }
+}
