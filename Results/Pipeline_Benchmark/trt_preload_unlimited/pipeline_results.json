@@ -1,0 +1,115 @@
+{
+  "system_info": {
+    "cpu": "x86_64",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "pytorch_version": "2.10.0+cu130",
+    "cuda_version": "13.0",
+    "python_version": "3.11.14"
+  },
+  "config": {
+    "num_images": 10000,
+    "num_timed": 9995,
+    "data_dir": "Data/MA/run1",
+    "heatmap_model": "fast_bacteria_hm_optimized.pt",
+    "classifier_model": "bacteria_class.pt",
+    "device": "cuda",
+    "backend": "tensorrt",
+    "recon300": false,
+    "ema_alpha": 0.05,
+    "ema_warmup": 5,
+    "peak_threshold": 0.3,
+    "topk": 50,
+    "classification_threshold": 0.25,
+    "frame_source": "FrameSource"
+  },
+  "stage_statistics": {
+    "stage1_load": {
+      "mean_ms": 0.0726047476467417,
+      "median_ms": 0.0638170022284612,
+      "std_ms": 0.07694055624903762,
+      "min_ms": 0.04728201020043343,
+      "max_ms": 2.294521007570438,
+      "p95_ms": 0.09615799936000256,
+      "p99_ms": 0.1463967919698916,
+      "throughput_fps": 13773.20399026106,
+      "num_samples": 9995
+    },
+    "stage2_ema": {
+      "mean_ms": 0.09734369585585928,
+      "median_ms": 0.08515200018882751,
+      "std_ms": 0.08207433148704428,
+      "min_ms": 0.05843200162053108,
+      "max_ms": 2.269984006881714,
+      "p95_ms": 0.13377920538187021,
+      "p99_ms": 0.18121984153985973,
+      "throughput_fps": 10272.878908160012,
+      "num_samples": 9995
+    },
+    "stage3_holographic": {
+      "mean_ms": 0.38446275621220255,
+      "median_ms": 0.35631999373435974,
+      "std_ms": 0.11998913820127338,
+      "min_ms": 0.16857600212097168,
+      "max_ms": 2.7707200050354004,
+      "p95_ms": 0.5240575850009916,
+      "p99_ms": 0.6600352168083186,
+      "throughput_fps": 2601.0321776085234,
+      "num_samples": 9995
+    },
+    "stage4_detect": {
+      "mean_ms": 1.4704786506159535,
+      "median_ms": 1.5515520572662354,
+      "std_ms": 0.6185342234293449,
+      "min_ms": 0.5899839997291565,
+      "max_ms": 11.038240432739258,
+      "p95_ms": 1.9979904174804684,
+      "p99_ms": 3.630122313499435,
+      "throughput_fps": 680.050675731416,
+      "num_samples": 9995
+    },
+    "stage5_classify": {
+      "mean_ms": 8.917717656959326,
+      "median_ms": 9.760654997080564,
+      "std_ms": 5.567611087608446,
+      "min_ms": 0.0015820114640519023,
+      "max_ms": 27.03482699871529,
+      "p95_ms": 16.399135305255182,
+      "p99_ms": 19.159052681643505,
+      "throughput_fps": 112.13631541918204,
+      "num_samples": 9995
+    },
+    "stage6_postprocess": {
+      "mean_ms": 0.241379681660462,
+      "median_ms": 0.27360300009604543,
+      "std_ms": 0.12072006160091223,
+      "min_ms": 0.0006710033630952239,
+      "max_ms": 0.8678529993630946,
+      "p95_ms": 0.4065072978846729,
+      "p99_ms": 0.5175260113901455,
+      "throughput_fps": 4142.8507698782005,
+      "num_samples": 9995
+    }
+  },
+  "end_to_end": {
+    "mean_ms": 11.183987188950544,
+    "median_ms": 12.19160496618133,
+    "std_ms": 6.083316479584972,
+    "min_ms": 1.0143860226962715,
+    "max_ms": 30.112167002633214,
+    "p95_ms": 19.421805828262585,
+    "p99_ms": 22.37214890384348,
+    "throughput_fps": 89.41355020398906,
+    "wall_clock_seconds": 112.85628243599785
+  },
+  "gpu_memory": {
+    "peak_allocated_mb": 221.202944,
+    "peak_reserved_mb": 289.406976
+  },
+  "detection_summary": {
+    "total_detections": 310312,
+    "total_filtered": 143660,
+    "images_with_detections": 9694,
+    "pd_count": 143660,
+    "ec_count": 0
+  }
+}

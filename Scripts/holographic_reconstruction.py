@@ -36,18 +36,28 @@ class HolographicReconstructor:
         self.shift_mean = shift_mean
         self.shift_value = shift_value
         self.padding = padding
-        
+
         # Set device
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
             self.device = torch.device(device)
-            
+
         # Initialize reconstruction parameters
         self._initialized = False
         self.H = None  # propagation filter
         self.f2_new = None  # frequency domain coordinates
         self.z_list = None  # list of z values
+
+        # Cached propagation filters (computed once per image size)
+        self.Hz_stack = None   # Batched propagation filter [num_planes, H_pad, W_pad]
+        self.phase_stack = None  # Phase correction [num_planes]
+
+        # Actual padding used (may differ from self.padding when using power-of-2)
+        self._pad_h = None
+        self._pad_w = None
+        self._padded_height = None
+        self._padded_width = None
         
     def _initialize_propagation(self, im_height: int, im_width: int):
         """Initialize propagation filters for given image dimensions."""
@@ -73,11 +83,21 @@ class HolographicReconstructor:
             z_start = scale_factor * scale_factor * z_start
             z_step = scale_factor * scale_factor * z_step
             
-        # Add padding
-        padded_height = im_height + 2 * self.padding
-        padded_width = im_width + 2 * self.padding
-        
-        # Create frequency domain coordinates  
+        # Add padding — use power-of-2 dimensions for optimal cuFFT performance
+        min_padded_height = im_height + 2 * self.padding
+        min_padded_width = im_width + 2 * self.padding
+
+        # Next power of 2 >= min_padded
+        padded_height = 1 << (min_padded_height - 1).bit_length()
+        padded_width = 1 << (min_padded_width - 1).bit_length()
+
+        # Calculate actual padding (split evenly on both sides)
+        self._pad_h = (padded_height - im_height) // 2
+        self._pad_w = (padded_width - im_width) // 2
+        self._padded_height = padded_height
+        self._padded_width = padded_width
+
+        # Create frequency domain coordinates
         x = torch.arange(padded_width, device=self.device)
         y = torch.arange(padded_height, device=self.device)
         xx, yy = torch.meshgrid(x, y, indexing='ij')
@@ -105,7 +125,19 @@ class HolographicReconstructor:
         # Create z list
         z_end = self.num_planes * z_step + z_start
         self.z_list = np.arange(z_start, z_end, z_step)
-        
+
+        # Pre-compute and cache propagation filters (Hz_stack and phase_stack)
+        # These only depend on z_list, f2_new, wavelength — all fixed for given dimensions
+        z_tensor = torch.as_tensor(self.z_list, device=self.device, dtype=torch.float32)
+
+        # Hz_stack: shape (num_planes, H_pad, W_pad) — complex64
+        self.Hz_stack = torch.exp(
+            -2j * math.pi * z_tensor[:, None, None] * self.f2_new / self.wavelength
+        )
+
+        # phase_stack: shape (num_planes,) — complex64
+        self.phase_stack = torch.exp(2j * math.pi * z_tensor / self.wavelength)
+
         self._initialized = True
         
     def reconstruct_3d_batched(self, hologram: torch.Tensor) -> torch.Tensor:
@@ -126,45 +158,36 @@ class HolographicReconstructor:
         H_in, W_in = hologram.shape
         self._initialize_propagation(H_in, W_in)
         
-        # Pad image with median values
+        # Pad image with median values (using power-of-2 dimensions)
         median_val = torch.median(hologram)
         im_new = median_val * torch.ones(
-            (H_in + 2*self.padding, W_in + 2*self.padding),
+            (self._padded_height, self._padded_width),
             device=self.device,
             dtype=hologram.dtype
         )
-        im_new[self.padding:self.padding + H_in, 
-               self.padding:self.padding + W_in] = hologram
-               
-        # FFT of padded image
+        im_new[self._pad_h:self._pad_h + H_in,
+               self._pad_w:self._pad_w + W_in] = hologram
+
+        # FFT of padded image (power-of-2 dimensions for optimal cuFFT)
         Fholo = torch.fft.fft2(im_new.float())
-        H_pad, W_pad = im_new.shape
-        
-        # Create batched propagation filters for all planes
-        z_tensor = torch.as_tensor(self.z_list, device=self.device, dtype=Fholo.dtype)
-        num_planes = z_tensor.shape[0]
-        
-        # Batched propagation: shape (num_planes, H_pad, W_pad)
-        Hz_stack = torch.exp(
-            -2j * math.pi * z_tensor[:, None, None] * self.f2_new / self.wavelength
-        )
+        H_pad, W_pad = self._padded_height, self._padded_width
+        num_planes = self.num_planes
 
         # Expand hologram for batch processing
         Fholo_batched = Fholo.unsqueeze(0).expand(num_planes, H_pad, W_pad)
 
-        # Multiply and inverse FFT
-        Fplane = Fholo_batched * Hz_stack
+        # Multiply with cached Hz_stack and inverse FFT
+        Fplane = Fholo_batched * self.Hz_stack
         rec_batched = torch.fft.ifft2(Fplane, dim=(-2, -1))
-        
-        # Apply phase correction
-        phase_stack = torch.exp(2j * math.pi * z_tensor / self.wavelength)
-        rec_batched = rec_batched * phase_stack[:, None, None]
-        
+
+        # Apply cached phase correction
+        rec_batched = rec_batched * self.phase_stack[:, None, None]
+
         # Permute to [H_pad, W_pad, num_planes] and remove padding
         rec_batched = rec_batched.permute(1, 2, 0)
         rec3 = rec_batched[
-            self.padding:H_pad - self.padding,
-            self.padding:W_pad - self.padding,
+            self._pad_h:self._pad_h + H_in,
+            self._pad_w:self._pad_w + W_in,
             :
         ]
         

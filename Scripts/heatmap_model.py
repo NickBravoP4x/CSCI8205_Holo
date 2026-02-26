@@ -70,13 +70,27 @@ class HeatmapDetector(nn.Module):
         self.head = FPNHead()
 
     def forward(self, x):
-        features = {}
-        out = x
-        for i, layer in enumerate(self.backbone):
-            out = layer(out)
-            if i in self.TAP_INDICES:
-                features[i] = out
-        return self.head(features[0], features[2], features[7], features[12])
+        # Unrolled backbone loop (required for torch.jit.trace / TensorRT export).
+        # MobileNetV3-Small has 13 blocks (indices 0-12).
+        # Features are tapped at TAP_INDICES = (0, 2, 7, 12).
+        out = self.backbone[0](x)
+        feat0 = out
+        out = self.backbone[1](out)
+        out = self.backbone[2](out)
+        feat2 = out
+        out = self.backbone[3](out)
+        out = self.backbone[4](out)
+        out = self.backbone[5](out)
+        out = self.backbone[6](out)
+        out = self.backbone[7](out)
+        feat7 = out
+        out = self.backbone[8](out)
+        out = self.backbone[9](out)
+        out = self.backbone[10](out)
+        out = self.backbone[11](out)
+        out = self.backbone[12](out)
+        feat12 = out
+        return self.head(feat0, feat2, feat7, feat12)
 
 
 def _fuse_conv_bn_in_module(module: nn.Module):

@@ -1,18 +1,22 @@
 """
 Standalone end-to-end holographic pipeline for benchmarking.
 
-Processes real holograms from disk through all 6 stages:
-    1. Load & Resize (CPU)
+Processes real holograms through up to 7 stages:
+    1. Load & Resize (CPU) — or GPU ring-buffer via --preload
     2. EMA Enhancement (GPU)
-    3. Holographic Reconstruction (GPU)
-    4. Heatmap Detection + Peak Finding (GPU)
-    5. Classification (GPU)
+    3. Holographic Reconstruction, 3-plane (GPU)
+    4. Heatmap Detection + Peak Finding (GPU) — PyTorch or TensorRT
+    5. Classification (GPU) — PyTorch YOLO or TensorRT engine
     6. Post-processing (CPU)
+    7. 300-plane Reconstruction (GPU, optional via --recon300)
 
 Usage:
     python Scripts/pipeline.py --data-dir Data/MA/run1 --quick           # 100 images
     python Scripts/pipeline.py --data-dir Data/MA/run1                   # all images
     python Scripts/pipeline.py --data-dir Data/MA/run1 --device cuda:1   # different GPU
+    python Scripts/pipeline.py --data-dir Data/MA/run1 --trt             # TensorRT models
+    python Scripts/pipeline.py --data-dir Data/MA/run1 --recon300        # + 300-plane recon
+    python Scripts/pipeline.py --data-dir Data/MA/run1 --preload --camera-fps 400  # virtual camera
 """
 
 import argparse
@@ -46,6 +50,10 @@ from holographic_reconstruction import HolographicReconstructor
 class StageTimer:
     """Per-stage timing with CUDA events for GPU stages and perf_counter for CPU."""
 
+    GPU_STAGES = frozenset({
+        'stage2_ema', 'stage3_holographic', 'stage4_detect', 'stage7_recon300',
+    })
+
     def __init__(self, device: torch.device):
         self.device = device
         self.use_cuda = device.type == 'cuda'
@@ -54,7 +62,7 @@ class StageTimer:
     def start(self, stage: str) -> dict:
         """Return a timing context to pass to stop()."""
         ctx = {'stage': stage}
-        if self.use_cuda and stage in ('stage2_ema', 'stage3_holographic', 'stage4_detect'):
+        if self.use_cuda and stage in self.GPU_STAGES:
             start_event = torch.cuda.Event(enable_timing=True)
             end_event = torch.cuda.Event(enable_timing=True)
             start_event.record()
@@ -331,9 +339,13 @@ class BacteriaClassifier:
                 crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2RGB)
             rgb_crops.append(crop)
 
-        # Batch inference
-        results = self.model.predict(rgb_crops, device=self.device, imgsz=self.crop_size,
-                                     verbose=False)
+        # Batch inference (chunk to max 32 for TRT engine compatibility)
+        max_batch = 32
+        results = []
+        for start in range(0, len(rgb_crops), max_batch):
+            chunk = rgb_crops[start:start + max_batch]
+            results.extend(self.model.predict(chunk, device=self.device, imgsz=self.crop_size,
+                                              verbose=False))
 
         classified = []
         for i, det in enumerate(detections):
@@ -469,10 +481,16 @@ class HolographicPipeline:
 
     def __init__(self, data_dir: str, heatmap_model_path: str,
                  classifier_model_path: str, device: str = 'cuda',
-                 num_images: Optional[int] = None):
+                 num_images: Optional[int] = None, recon300: bool = False,
+                 use_trt: bool = False, heatmap_engine: Optional[str] = None,
+                 classifier_engine: Optional[str] = None,
+                 frame_source=None):
         self.data_dir = Path(data_dir)
         self.device = torch.device(device)
         self.num_images = num_images
+        self.recon300 = recon300
+        self.use_trt = use_trt
+        self.frame_source = frame_source
 
         # Collect image paths (sorted for reproducibility)
         self.image_paths = sorted(self.data_dir.glob('*.jpg'))
@@ -496,20 +514,49 @@ class HolographicPipeline:
         )
 
         # Stage 4: Heatmap detection
-        print("Loading heatmap detector...")
-        self.heatmap_model = load_heatmap_detector(heatmap_model_path, str(self.device))
+        self._backend = 'pytorch'
+        if use_trt and heatmap_engine:
+            print(f"Loading TRT heatmap engine: {heatmap_engine}")
+            import torch_tensorrt  # registers TRT custom classes for torch.jit.load
+            self.heatmap_model = torch.jit.load(heatmap_engine, map_location=self.device)
+            self.heatmap_model.eval()
+            self._backend = 'tensorrt'
+        else:
+            print("Loading heatmap detector...")
+            self.heatmap_model = load_heatmap_detector(heatmap_model_path, str(self.device))
         self.preprocessor = HeatmapPreprocessor(self.device)
         self.peak_detector = PeakDetector(threshold=0.3, min_distance=5, topk=50,
                                           output_scale=640.0, device=self.device)
 
         # Stage 5: Classification
-        print("Loading classifier...")
-        self.classifier = BacteriaClassifier(classifier_model_path, device=str(self.device),
-                                             crop_size=128, conf_threshold=0.25)
+        if use_trt and classifier_engine:
+            print(f"Loading TRT classifier engine: {classifier_engine}")
+            from ultralytics import YOLO
+            self.classifier = BacteriaClassifier.__new__(BacteriaClassifier)
+            self.classifier.model = YOLO(classifier_engine, task='classify')
+            self.classifier.device = str(self.device)
+            self.classifier.crop_size = 128
+            self.classifier.conf_threshold = 0.25
+            self._backend = 'tensorrt'
+        else:
+            print("Loading classifier...")
+            self.classifier = BacteriaClassifier(classifier_model_path, device=str(self.device),
+                                                 crop_size=128, conf_threshold=0.25)
 
         # Stage 6: Post-processing
         self.postprocessor = PostProcessor(detection_threshold=0.3,
                                            classification_threshold=0.25)
+
+        # Stage 7 (optional): 300-plane holographic reconstruction
+        self.reconstructor_300 = None
+        if self.recon300:
+            print("Initializing 300-plane reconstructor (Hz_stack will be cached)...")
+            self.reconstructor_300 = HolographicReconstructor(
+                resolution=0.087,
+                wavelength=405.0 / 1.33 / 1000.0,
+                z_start=0, z_step=0.2, num_planes=300,
+                device=str(self.device),
+            )
 
         # Timer
         self.timer = StageTimer(self.device)
@@ -554,11 +601,24 @@ class HolographicPipeline:
         """Apply static filtering and confidence thresholds."""
         return self.postprocessor.process(detections)
 
+    def stage7_recon300(self, enhanced: torch.Tensor):
+        """300-plane holographic reconstruction (optional, for autofocus benchmarking).
+
+        Output is discarded — this stage exists purely for latency measurement.
+        """
+        volume = self.reconstructor_300.reconstruct_intensity(enhanced)
+        del volume
+
     def warmup(self, n: int = 20):
         """Run warmup iterations to stabilize GPU clocks and JIT."""
         print(f"Warming up ({n} iterations)...")
         dummy_np = np.random.randint(0, 255, (448, 448), dtype=np.uint8)
         dummy_gpu = torch.from_numpy(dummy_np.astype(np.float32)).to(self.device)
+
+        # Warmup classifier (triggers TRT engine load on first predict())
+        dummy_crop = np.random.randint(0, 255, (128, 128, 3), dtype=np.uint8)
+        self.classifier.model.predict(dummy_crop, device=str(self.device),
+                                      imgsz=128, verbose=False)
 
         for _ in range(n):
             # Warmup EMA
@@ -567,6 +627,10 @@ class HolographicPipeline:
             with torch.no_grad():
                 x = torch.randn(1, 3, 448, 448, device=self.device)
                 self.heatmap_model(x)
+
+        # Warmup 300-plane reconstructor if enabled
+        if self.reconstructor_300 is not None:
+            self.reconstructor_300.reconstruct_intensity(dummy_gpu)
 
         # Reset EMA state for actual run
         self.ema.reset()
@@ -584,30 +648,48 @@ class HolographicPipeline:
         images_with_detections = 0
         ema_warmup_frames = 5
 
-        print(f"\nProcessing {len(self.image_paths)} images...")
+        # Determine iteration source
+        use_frame_source = self.frame_source is not None
+        n_images = len(self.image_paths)
+        print(f"\nProcessing {n_images} images"
+              f"{' (preloaded)' if use_frame_source else ''}...")
         t_start = time.perf_counter()
 
-        for idx, path in enumerate(self.image_paths):
+        for idx in range(n_images):
             skip_timing = idx < ema_warmup_frames
 
             # Stage 1: Load & Resize
-            if not skip_timing:
-                ctx = self.timer.start('stage1_load')
-            frame_np = self.stage1_load_resize(path)
-            if not skip_timing:
-                self.timer.stop(ctx)
+            if use_frame_source:
+                # FrameSource provides GPU tensor directly — minimal I/O
+                if not skip_timing:
+                    ctx = self.timer.start('stage1_load')
+                frame_gpu = self.frame_source.next_frame()
+                # Convert to numpy for classification stage (needs uint8 crops)
+                frame_np = (frame_gpu * 255).byte().cpu().numpy()
+                if not skip_timing:
+                    self.timer.stop(ctx)
+            else:
+                if not skip_timing:
+                    ctx = self.timer.start('stage1_load')
+                frame_np = self.stage1_load_resize(self.image_paths[idx])
+                if not skip_timing:
+                    self.timer.stop(ctx)
 
             # Stage 2: EMA Enhancement
             if not skip_timing:
                 ctx = self.timer.start('stage2_ema')
-            enhanced = self.stage2_ema_enhance(frame_np)
+            if use_frame_source:
+                # frame_gpu is already float32 [0,1] on GPU; EMA expects [0,255]
+                enhanced = self.ema.enhance(frame_gpu * 255.0)
+            else:
+                enhanced = self.stage2_ema_enhance(frame_np)
             if not skip_timing:
                 self.timer.stop(ctx)
 
             # Skip remaining stages during EMA warmup (output is zeros)
             if not self.ema.is_warmed_up:
-                if (idx + 1) % 100 == 0 or idx == len(self.image_paths) - 1:
-                    print(f"  [{idx+1}/{len(self.image_paths)}] (EMA warmup)")
+                if (idx + 1) % 100 == 0 or idx == n_images - 1:
+                    print(f"  [{idx+1}/{n_images}] (EMA warmup)")
                 continue
 
             # Stage 3: Holographic Reconstruction
@@ -638,13 +720,21 @@ class HolographicPipeline:
             if not skip_timing:
                 self.timer.stop(ctx)
 
+            # Stage 7: 300-plane reconstruction (optional)
+            if self.recon300 and self.reconstructor_300 is not None:
+                if not skip_timing:
+                    ctx = self.timer.start('stage7_recon300')
+                self.stage7_recon300(enhanced)
+                if not skip_timing:
+                    self.timer.stop(ctx)
+
             total_detections += len(detections)
             total_filtered += len(filtered)
             if len(detections) > 0:
                 images_with_detections += 1
 
-            if (idx + 1) % 100 == 0 or idx == len(self.image_paths) - 1:
-                print(f"  [{idx+1}/{len(self.image_paths)}] dets={len(detections)} "
+            if (idx + 1) % 100 == 0 or idx == n_images - 1:
+                print(f"  [{idx+1}/{n_images}] dets={len(detections)} "
                       f"filtered={len(filtered)}")
 
         t_total = time.perf_counter() - t_start
@@ -652,6 +742,8 @@ class HolographicPipeline:
         # Build results
         stage_names = ['stage1_load', 'stage2_ema', 'stage3_holographic',
                         'stage4_detect', 'stage5_classify', 'stage6_postprocess']
+        if self.recon300:
+            stage_names.append('stage7_recon300')
         stage_statistics = {}
         for name in stage_names:
             stats = self.timer.stats(name)
@@ -703,11 +795,14 @@ class HolographicPipeline:
                 'heatmap_model': 'fast_bacteria_hm_optimized.pt',
                 'classifier_model': 'bacteria_class.pt',
                 'device': str(self.device),
+                'backend': self._backend,
+                'recon300': self.recon300,
                 'ema_alpha': 0.05,
                 'ema_warmup': ema_warmup_frames,
                 'peak_threshold': 0.3,
                 'topk': 50,
                 'classification_threshold': 0.25,
+                'frame_source': self.frame_source.__class__.__name__ if self.frame_source else 'cv2.imread',
             },
             'stage_statistics': stage_statistics,
             'end_to_end': {
@@ -750,6 +845,25 @@ def main():
                         help='Process exactly N images')
     parser.add_argument('--output', type=str, default='Results/Pipeline_Benchmark/pipeline_results.json',
                         help='Output JSON path (default: Results/Pipeline_Benchmark/pipeline_results.json)')
+    # Phase 1: 300-plane reconstruction
+    parser.add_argument('--recon300', action='store_true',
+                        help='Enable 300-plane holographic reconstruction (stage 7)')
+    # Phase 2: TensorRT
+    parser.add_argument('--trt', action='store_true',
+                        help='Use TensorRT engines (auto-discovers .ts/.engine next to .pt weights)')
+    parser.add_argument('--heatmap-engine', type=str, default=None,
+                        help='Path to TRT heatmap engine (.ts file)')
+    parser.add_argument('--classifier-engine', type=str, default=None,
+                        help='Path to TRT classifier engine (.engine file)')
+    # Phase 3: Virtual camera
+    parser.add_argument('--preload', action='store_true',
+                        help='Pre-load frames into GPU memory (virtual camera)')
+    parser.add_argument('--no-preload', action='store_true',
+                        help='Force original cv2.imread path (I/O-inclusive benchmark)')
+    parser.add_argument('--camera-fps', type=float, default=None,
+                        help='Virtual camera FPS (0=unlimited, 400=real-time). Implies --preload.')
+    parser.add_argument('--preload-count', type=int, default=200,
+                        help='Number of frames to pre-load into GPU (default: 200)')
     args = parser.parse_args()
 
     num_images = args.num_images
@@ -761,12 +875,54 @@ def main():
     heatmap_path = str(ref_dir / 'fast_bacteria_hm_optimized.pt')
     classifier_path = str(ref_dir / 'bacteria_class.pt')
 
+    # TRT auto-discovery: find .ts/.engine files next to the .pt weights
+    heatmap_engine = args.heatmap_engine
+    classifier_engine = args.classifier_engine
+    if args.trt:
+        if heatmap_engine is None:
+            candidate = ref_dir / 'heatmap_448_dynamic_32.ts'
+            if candidate.exists():
+                heatmap_engine = str(candidate)
+            else:
+                # Also check for .engine file from ultralytics export
+                candidate2 = ref_dir / 'heatmap_448_dynamic_32.engine'
+                if candidate2.exists():
+                    heatmap_engine = str(candidate2)
+        if classifier_engine is None:
+            candidate = ref_dir / 'bacteria_class.engine'
+            if candidate.exists():
+                classifier_engine = str(candidate)
+
+    # Virtual camera / frame source
+    frame_source = None
+    use_preload = args.preload or args.camera_fps is not None
+    if use_preload and not args.no_preload:
+        from frame_source import FrameSource
+        # Determine mode
+        if args.camera_fps is not None and args.camera_fps > 0:
+            mode = 'fixed'
+        else:
+            mode = 'sync'
+        frame_source = FrameSource(
+            data_dir=args.data_dir,
+            device=args.device,
+            max_frames=args.preload_count,
+            mode=mode,
+            target_fps=args.camera_fps or 0,
+            num_images=num_images,
+        )
+
     pipeline = HolographicPipeline(
         data_dir=args.data_dir,
         heatmap_model_path=heatmap_path,
         classifier_model_path=classifier_path,
         device=args.device,
         num_images=num_images,
+        recon300=args.recon300,
+        use_trt=args.trt,
+        heatmap_engine=heatmap_engine,
+        classifier_engine=classifier_engine,
+        frame_source=frame_source,
     )
 
     results = pipeline.run()
