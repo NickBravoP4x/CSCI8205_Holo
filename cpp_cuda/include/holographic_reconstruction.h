@@ -54,6 +54,17 @@ public:
     void reconstruct_intensity(const float* h_hologram, int height, int width,
                                float* h_output);
 
+    /// GPU-only reconstruction (no H2D/D2H transfers).
+    /// d_hologram_ must already contain data (via upload_hologram).
+    /// Result is left in d_output_ (retrieve via download_output).
+    void reconstruct_intensity_device(int height, int width);
+
+    /// Upload hologram from host to internal device buffer.
+    void upload_hologram(const float* h_hologram, int height, int width);
+
+    /// Download output from internal device buffer to host.
+    void download_output(float* h_output, int height, int width);
+
     /// Returns the number of depth planes
     int num_planes() const { return params_.num_planes; }
 
@@ -68,6 +79,8 @@ private:
     int last_width_  = 0;
     int padded_h_    = 0;
     int padded_w_    = 0;
+    int actual_pad_h_ = 0;  // (padded_h - height) / 2
+    int actual_pad_w_ = 0;  // (padded_w - width)  / 2
 
     // cuFFT plans
     cufftHandle plan_fwd_     = 0;  // single 2D C2C forward
@@ -81,6 +94,7 @@ private:
     cufftComplex* d_Fholo_      = nullptr;  // Hp x Wp complex (fwd FFT output)
     float*       d_f2_new_      = nullptr;  // Hp x Wp propagation filter (precomputed)
     float*       d_z_list_      = nullptr;  // num_planes z values
+    cufftComplex* d_Hz_stack_   = nullptr;  // num_planes x Hp x Wp (cached propagation)
     cufftComplex* d_Fplanes_    = nullptr;  // num_planes x Hp x Wp (propagated spectra)
     cufftComplex* d_rec_        = nullptr;  // num_planes x Hp x Wp (IFFT output)
     float*       d_intensity_   = nullptr;  // num_planes x H x W (output intensity)

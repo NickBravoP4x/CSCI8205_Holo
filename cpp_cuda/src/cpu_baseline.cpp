@@ -68,8 +68,17 @@ void CPUHolographicReconstructor::ensure_initialized(int height, int width) {
 
     last_height_ = height;
     last_width_  = width;
-    padded_h_    = height + 2 * params_.padding;
-    padded_w_    = width  + 2 * params_.padding;
+
+    // Power-of-2 padding (matches Python: next_pow2(H + 2*padding))
+    auto next_pow2 = [](int n) -> int {
+        if (n <= 1) return 1;
+        n -= 1; n |= n >> 1; n |= n >> 2; n |= n >> 4; n |= n >> 8; n |= n >> 16;
+        return n + 1;
+    };
+    padded_h_     = next_pow2(height + 2 * params_.padding);
+    padded_w_     = next_pow2(width  + 2 * params_.padding);
+    actual_pad_h_ = (padded_h_ - height) / 2;
+    actual_pad_w_ = (padded_w_ - width)  / 2;
 
     int pad_total = padded_h_ * padded_w_;
 
@@ -150,8 +159,8 @@ void CPUHolographicReconstructor::reconstruct_intensity(
         int col = idx % padded_w_;
 
         float val;
-        int src_row = row - params_.padding;
-        int src_col = col - params_.padding;
+        int src_row = row - actual_pad_h_;
+        int src_col = col - actual_pad_w_;
         if (src_row >= 0 && src_row < height && src_col >= 0 && src_col < width) {
             val = hologram[src_row * width + src_col];
         } else {
@@ -199,8 +208,8 @@ void CPUHolographicReconstructor::reconstruct_intensity(
         for (int idx = 0; idx < out_total; ++idx) {
             int out_row = idx / width;
             int out_col = idx % width;
-            int pad_row = out_row + params_.padding;
-            int pad_col = out_col + params_.padding;
+            int pad_row = out_row + actual_pad_h_;
+            int pad_col = out_col + actual_pad_w_;
             int pad_idx = pad_row * padded_w_ + pad_col;
 
             // Normalize IFFT (FFTW doesn't normalize)

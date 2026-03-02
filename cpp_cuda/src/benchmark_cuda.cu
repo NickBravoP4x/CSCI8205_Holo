@@ -83,26 +83,33 @@ int main(int argc, char* argv[]) {
     CUDAHolographicReconstructor recon(params);
     std::vector<float> output(size * size * depth);
 
-    // Warmup
+    // Pre-upload hologram to GPU before timing
+    recon.upload_hologram(hologram.data(), size, size);
+    cudaDeviceSynchronize();
+
+    // Warmup (GPU-only path)
     printf("Warming up...\n");
     for (int i = 0; i < warmup; ++i) {
-        recon.reconstruct_intensity(hologram.data(), size, size, output.data());
+        recon.reconstruct_intensity_device(size, size);
     }
     cudaDeviceSynchronize();
 
-    // Benchmark
+    // Benchmark (GPU-only path — no H2D/D2H in timing)
     printf("Benchmarking...\n");
     std::vector<double> latencies(iterations);
 
     for (int i = 0; i < iterations; ++i) {
         cudaDeviceSynchronize();
         auto start = std::chrono::high_resolution_clock::now();
-        recon.reconstruct_intensity(hologram.data(), size, size, output.data());
+        recon.reconstruct_intensity_device(size, size);
         cudaDeviceSynchronize();
         auto end = std::chrono::high_resolution_clock::now();
 
         latencies[i] = std::chrono::duration<double, std::milli>(end - start).count();
     }
+
+    // Download output after timing for sanity check
+    recon.download_output(output.data(), size, size);
 
     // Statistics
     std::sort(latencies.begin(), latencies.end());

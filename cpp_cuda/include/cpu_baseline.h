@@ -48,6 +48,8 @@ private:
     int last_width_  = 0;
     int padded_h_    = 0;
     int padded_w_    = 0;
+    int actual_pad_h_ = 0;
+    int actual_pad_w_ = 0;
 
     // FFTW plans (single-precision: fftwf)
     fftwf_plan plan_fwd_     = nullptr;
