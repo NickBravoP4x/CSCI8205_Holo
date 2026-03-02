@@ -68,6 +68,16 @@ public:
     /// Returns the number of depth planes
     int num_planes() const { return params_.num_planes; }
 
+    /// Access internal device intensity buffer [num_planes][H][W] (NCHW layout)
+    const float* device_intensity_nchw() const { return d_intensity_; }
+
+    /// Access internal device hologram input buffer [H][W]
+    /// Must call prepare(H, W) first to ensure buffer is allocated.
+    float* device_hologram_ptr() { return d_hologram_; }
+
+    /// Pre-allocate buffers for given dimensions (call before device_hologram_ptr)
+    void prepare(int height, int width) { ensure_initialized(height, width); }
+
 private:
     void ensure_initialized(int height, int width);
     void free_buffers();

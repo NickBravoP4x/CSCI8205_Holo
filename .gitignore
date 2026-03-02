@@ -29,6 +29,14 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Large model/engine binaries (platform-specific, rebuild from ONNX)
+*.engine
+*.onnx.data
+yolo11n-cls.pt
+
+# Temporary presentation files
+temp/
+
 # Generated output directories (created by benchmark/analysis scripts)
 /benchmark_results/
 /roofline_analysis/

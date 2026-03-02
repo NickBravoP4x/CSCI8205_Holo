@@ -100,3 +100,52 @@ target_link_libraries(test_reconstruction PRIVATE
     holographic_cuda_lib
     holographic_cpu_lib
 )
+
+# ---- Pipeline (TensorRT + OpenCV) ----
+
+# OpenCV
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+
+# TensorRT
+find_path(TENSORRT_INCLUDE_DIR NvInfer.h HINTS /usr/include/x86_64-linux-gnu)
+find_library(NVINFER_LIB nvinfer HINTS /usr/lib/x86_64-linux-gnu)
+find_library(NVINFER_PLUGIN_LIB nvinfer_plugin HINTS /usr/lib/x86_64-linux-gnu)
+
+if(NOT NVINFER_LIB)
+    message(WARNING "TensorRT not found. Pipeline targets will not be built.")
+else()
+    message(STATUS "TensorRT found: ${NVINFER_LIB}")
+    message(STATUS "OpenCV found: ${OpenCV_VERSION}")
+
+    # Pipeline static library
+    add_library(pipeline_lib STATIC
+        src/ema_stage.cu
+        src/tensorrt_engine.cu
+        src/peak_detection.cu
+        src/postprocessing.cpp
+        src/pipeline.cu
+    )
+    target_include_directories(pipeline_lib PUBLIC
+        include
+        ${TENSORRT_INCLUDE_DIR}
+    )
+    target_link_libraries(pipeline_lib PUBLIC
+        holographic_cuda_lib
+        ${NVINFER_LIB}
+        ${NVINFER_PLUGIN_LIB}
+        ${OpenCV_LIBS}
+        CUDA::cudart
+    )
+    set_target_properties(pipeline_lib PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+
+    # Pipeline benchmark executable
+    add_executable(benchmark_pipeline src/benchmark_pipeline.cu)
+    target_link_libraries(benchmark_pipeline PRIVATE pipeline_lib)
+    set_target_properties(benchmark_pipeline PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    )
+endif()

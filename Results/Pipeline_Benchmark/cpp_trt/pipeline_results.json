@@ -1,0 +1,95 @@
+{
+  "system_info": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "gpu_memory_mb": 32111,
+    "cuda_version": "13.1",
+    "backend": "C++ TensorRT"
+  },
+  "config": {
+    "num_images": 100,
+    "img_size": 448,
+    "backend": "cpp_trt",
+    "device": "cuda:0"
+  },
+  "stage_statistics": {
+    "stage1_load": {
+        "mean_ms": 4.2945,
+        "median_ms": 4.2136,
+        "std_ms": 0.4393,
+        "min_ms": 3.7491,
+        "max_ms": 7.9527,
+        "p95_ms": 4.7627,
+        "p99_ms": 7.9527,
+        "throughput_fps": 232.8547
+      },
+    "stage2_ema": {
+        "mean_ms": 0.0080,
+        "median_ms": 0.0063,
+        "std_ms": 0.0113,
+        "min_ms": 0.0046,
+        "max_ms": 0.1176,
+        "p95_ms": 0.0120,
+        "p99_ms": 0.1176,
+        "throughput_fps": 125764.6493
+      },
+    "stage3_holographic": {
+        "mean_ms": 0.1775,
+        "median_ms": 0.1526,
+        "std_ms": 0.2064,
+        "min_ms": 0.1331,
+        "max_ms": 2.2271,
+        "p95_ms": 0.1884,
+        "p99_ms": 2.2271,
+        "throughput_fps": 5633.6962
+      },
+    "stage4_heatmap": {
+        "mean_ms": 0.4718,
+        "median_ms": 0.4703,
+        "std_ms": 0.0215,
+        "min_ms": 0.4124,
+        "max_ms": 0.5535,
+        "p95_ms": 0.5145,
+        "p99_ms": 0.5535,
+        "throughput_fps": 2119.5106
+      },
+    "stage5_classification": {
+        "mean_ms": 1.4121,
+        "median_ms": 1.6045,
+        "std_ms": 0.4722,
+        "min_ms": 0.0004,
+        "max_ms": 2.0527,
+        "p95_ms": 1.7071,
+        "p99_ms": 2.0527,
+        "throughput_fps": 708.1678
+      },
+    "stage6_postprocessing": {
+        "mean_ms": 0.0149,
+        "median_ms": 0.0173,
+        "std_ms": 0.0058,
+        "min_ms": 0.0004,
+        "max_ms": 0.0303,
+        "p95_ms": 0.0192,
+        "p99_ms": 0.0303,
+        "throughput_fps": 67265.0569
+      }
+  },
+  "end_to_end": {
+    "mean_ms": 6.4099,
+    "median_ms": 6.4896,
+    "std_ms": 0.6887,
+    "min_ms": 4.6951,
+    "max_ms": 10.8453,
+    "p95_ms": 7.0484,
+    "p99_ms": 10.8453,
+    "throughput_fps": 156.0087
+  },
+  "gpu_memory": {
+    "used_mb": 1175
+  },
+  "detection_summary": {
+    "total_detections": 4235,
+    "total_filtered": 2364,
+    "pd_count": 2364,
+    "ec_count": 0
+  }
+}

@@ -1,0 +1,483 @@
+CUDA Reconstruction Benchmarks — Mon Mar  2 01:45:45 PM CST 2026
+Iterations: 50, Warmup: 10
+
+=== CUDA 128x128 x 1 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 128x128
+Depth planes: 1
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.088 ms
+  Median: 0.087 ms
+  P95:    0.090 ms
+  P99:    0.100 ms
+  Min:    0.086 ms
+  Max:    0.100 ms
+  Throughput: 11417.0 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.394218
+  Expected range: [0.0, 1.0]
+
+=== CUDA 128x128 x 3 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 128x128
+Depth planes: 3
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.096 ms
+  Median: 0.091 ms
+  P95:    0.119 ms
+  P99:    0.185 ms
+  Min:    0.088 ms
+  Max:    0.185 ms
+  Throughput: 10456.0 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.392026
+  Expected range: [0.0, 1.0]
+
+=== CUDA 128x128 x 5 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 128x128
+Depth planes: 5
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.092 ms
+  Median: 0.092 ms
+  P95:    0.094 ms
+  P99:    0.097 ms
+  Min:    0.088 ms
+  Max:    0.097 ms
+  Throughput: 10904.5 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.394643
+  Expected range: [0.0, 1.0]
+
+=== CUDA 128x128 x 10 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 128x128
+Depth planes: 10
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.094 ms
+  Median: 0.093 ms
+  P95:    0.101 ms
+  P99:    0.104 ms
+  Min:    0.091 ms
+  Max:    0.104 ms
+  Throughput: 10655.6 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.400384
+  Expected range: [0.0, 1.0]
+
+=== CUDA 128x128 x 20 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 128x128
+Depth planes: 20
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.102 ms
+  Median: 0.101 ms
+  P95:    0.106 ms
+  P99:    0.110 ms
+  Min:    0.100 ms
+  Max:    0.110 ms
+  Throughput: 9766.3 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.406355
+  Expected range: [0.0, 1.0]
+
+=== CUDA 256x256 x 1 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 256x256
+Depth planes: 1
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.102 ms
+  Median: 0.101 ms
+  P95:    0.106 ms
+  P99:    0.114 ms
+  Min:    0.096 ms
+  Max:    0.114 ms
+  Throughput: 9825.4 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.395871
+  Expected range: [0.0, 1.0]
+
+=== CUDA 256x256 x 3 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 256x256
+Depth planes: 3
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.107 ms
+  Median: 0.107 ms
+  P95:    0.110 ms
+  P99:    0.113 ms
+  Min:    0.102 ms
+  Max:    0.113 ms
+  Throughput: 9338.8 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.397146
+  Expected range: [0.0, 1.0]
+
+=== CUDA 256x256 x 5 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 256x256
+Depth planes: 5
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.116 ms
+  Median: 0.116 ms
+  P95:    0.120 ms
+  P99:    0.121 ms
+  Min:    0.111 ms
+  Max:    0.121 ms
+  Throughput: 8600.9 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.395842
+  Expected range: [0.0, 1.0]
+
+=== CUDA 256x256 x 10 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 256x256
+Depth planes: 10
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.134 ms
+  Median: 0.130 ms
+  P95:    0.159 ms
+  P99:    0.235 ms
+  Min:    0.125 ms
+  Max:    0.235 ms
+  Throughput: 7481.6 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.394657
+  Expected range: [0.0, 1.0]
+
+=== CUDA 256x256 x 20 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 256x256
+Depth planes: 20
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.188 ms
+  Median: 0.188 ms
+  P95:    0.191 ms
+  P99:    0.196 ms
+  Min:    0.183 ms
+  Max:    0.196 ms
+  Throughput: 5320.4 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.396492
+  Expected range: [0.0, 1.0]
+
+=== CUDA 512x512 x 1 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 512x512
+Depth planes: 1
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.229 ms
+  Median: 0.226 ms
+  P95:    0.242 ms
+  P99:    0.323 ms
+  Min:    0.221 ms
+  Max:    0.323 ms
+  Throughput: 4357.7 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.395848
+  Expected range: [0.0, 1.0]
+
+=== CUDA 512x512 x 3 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 512x512
+Depth planes: 3
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.274 ms
+  Median: 0.272 ms
+  P95:    0.298 ms
+  P99:    0.306 ms
+  Min:    0.266 ms
+  Max:    0.306 ms
+  Throughput: 3649.3 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.396914
+  Expected range: [0.0, 1.0]
+
+=== CUDA 512x512 x 5 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 512x512
+Depth planes: 5
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.317 ms
+  Median: 0.314 ms
+  P95:    0.330 ms
+  P99:    0.394 ms
+  Min:    0.304 ms
+  Max:    0.394 ms
+  Throughput: 3158.6 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.397559
+  Expected range: [0.0, 1.0]
+
+=== CUDA 512x512 x 10 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 512x512
+Depth planes: 10
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.506 ms
+  Median: 0.505 ms
+  P95:    0.514 ms
+  P99:    0.516 ms
+  Min:    0.497 ms
+  Max:    0.516 ms
+  Throughput: 1977.0 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.397494
+  Expected range: [0.0, 1.0]
+
+=== CUDA 512x512 x 20 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 512x512
+Depth planes: 20
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.914 ms
+  Median: 0.911 ms
+  P95:    0.927 ms
+  P99:    0.972 ms
+  Min:    0.902 ms
+  Max:    0.972 ms
+  Throughput: 1094.6 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.395825
+  Expected range: [0.0, 1.0]
+
+=== CUDA 1024x1024 x 1 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 1024x1024
+Depth planes: 1
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.354 ms
+  Median: 0.350 ms
+  P95:    0.367 ms
+  P99:    0.409 ms
+  Min:    0.344 ms
+  Max:    0.409 ms
+  Throughput: 2828.1 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.396045
+  Expected range: [0.0, 1.0]
+
+=== CUDA 1024x1024 x 3 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 1024x1024
+Depth planes: 3
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   0.702 ms
+  Median: 0.698 ms
+  P95:    0.709 ms
+  P99:    0.809 ms
+  Min:    0.688 ms
+  Max:    0.809 ms
+  Throughput: 1425.1 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.396041
+  Expected range: [0.0, 1.0]
+
+=== CUDA 1024x1024 x 5 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 1024x1024
+Depth planes: 5
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   1.026 ms
+  Median: 1.012 ms
+  P95:    1.086 ms
+  P99:    1.244 ms
+  Min:    1.004 ms
+  Max:    1.244 ms
+  Throughput: 974.8 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.396375
+  Expected range: [0.0, 1.0]
+
+=== CUDA 1024x1024 x 10 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 1024x1024
+Depth planes: 10
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   1.818 ms
+  Median: 1.814 ms
+  P95:    1.850 ms
+  P99:    1.910 ms
+  Min:    1.804 ms
+  Max:    1.910 ms
+  Throughput: 550.1 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.397652
+  Expected range: [0.0, 1.0]
+
+=== CUDA 1024x1024 x 20 planes ===
+CUDA Holographic Reconstruction Benchmark
+==========================================
+Image size: 1024x1024
+Depth planes: 20
+GPU device: 0
+Warmup: 10, Iterations: 50
+
+Warming up...
+Benchmarking...
+
+Results:
+  Mean:   3.491 ms
+  Median: 3.488 ms
+  P95:    3.517 ms
+  P99:    3.572 ms
+  Min:    3.471 ms
+  Max:    3.572 ms
+  Throughput: 286.5 ops/s
+
+Output sanity check:
+  Min: 0.000000, Max: 1.000000, Mean: 0.397424
+  Expected range: [0.0, 1.0]
+

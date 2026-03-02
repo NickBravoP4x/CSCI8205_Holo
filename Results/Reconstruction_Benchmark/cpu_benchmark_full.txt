@@ -1,0 +1,523 @@
+OpenMP CPU Reconstruction Benchmarks — Mon Mar  2 01:45:59 PM CST 2026
+Iterations: 20, Warmup: 5
+
+=== CPU 128x128 x 1 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 128x128
+Depth planes: 1
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:    0.588 ms | Median:    0.591 ms | P95:    0.599 ms | Throughput:  1701.4 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    1.322 ms | Median:    1.332 ms | P95:    1.364 ms | Throughput:   756.4 ops/s
+  Speedup: 0.44x
+Threads:  4 | Mean:    0.803 ms | Median:    0.802 ms | P95:    0.838 ms | Throughput:  1244.9 ops/s
+  Speedup: 0.73x
+Threads:  8 | Mean:    0.497 ms | Median:    0.479 ms | P95:    0.552 ms | Throughput:  2010.6 ops/s
+  Speedup: 1.18x
+Threads: 16 | Mean:    0.548 ms | Median:    0.353 ms | P95:    2.160 ms | Throughput:  1823.9 ops/s
+  Speedup: 1.07x
+Threads: 32 | Mean:    0.440 ms | Median:    0.422 ms | P95:    0.625 ms | Throughput:  2274.5 ops/s
+  Speedup: 1.34x
+Threads: 64 | Mean:   43.350 ms | Median:   42.004 ms | P95:   49.996 ms | Throughput:    23.1 ops/s
+  Speedup: 0.01x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.394204
+
+=== CPU 128x128 x 3 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 128x128
+Depth planes: 3
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:    1.662 ms | Median:    1.638 ms | P95:    1.778 ms | Throughput:   601.6 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    1.151 ms | Median:    1.146 ms | P95:    1.273 ms | Throughput:   868.5 ops/s
+  Speedup: 1.44x
+Threads:  4 | Mean:    1.799 ms | Median:    1.771 ms | P95:    1.900 ms | Throughput:   555.8 ops/s
+  Speedup: 0.92x
+Threads:  8 | Mean:    1.169 ms | Median:    1.126 ms | P95:    2.088 ms | Throughput:   855.1 ops/s
+  Speedup: 1.42x
+Threads: 16 | Mean:    1.089 ms | Median:    0.873 ms | P95:    4.778 ms | Throughput:   918.6 ops/s
+  Speedup: 1.53x
+Threads: 32 | Mean:    0.967 ms | Median:    0.972 ms | P95:    1.026 ms | Throughput:  1034.2 ops/s
+  Speedup: 1.72x
+Threads: 64 | Mean:   68.200 ms | Median:   66.000 ms | P95:   81.005 ms | Throughput:    14.7 ops/s
+  Speedup: 0.02x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.391975
+
+=== CPU 128x128 x 5 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 128x128
+Depth planes: 5
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:    2.862 ms | Median:    2.818 ms | P95:    3.061 ms | Throughput:   349.5 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    4.836 ms | Median:    4.854 ms | P95:    4.888 ms | Throughput:   206.8 ops/s
+  Speedup: 0.59x
+Threads:  4 | Mean:    1.574 ms | Median:    1.282 ms | P95:    2.538 ms | Throughput:   635.3 ops/s
+  Speedup: 1.82x
+Threads:  8 | Mean:    1.776 ms | Median:    1.710 ms | P95:    2.249 ms | Throughput:   563.1 ops/s
+  Speedup: 1.61x
+Threads: 16 | Mean:    1.401 ms | Median:    1.327 ms | P95:    2.755 ms | Throughput:   713.8 ops/s
+  Speedup: 2.04x
+Threads: 32 | Mean:    1.317 ms | Median:    1.296 ms | P95:    1.441 ms | Throughput:   759.5 ops/s
+  Speedup: 2.17x
+Threads: 64 | Mean:   89.900 ms | Median:   88.188 ms | P95:  100.002 ms | Throughput:    11.1 ops/s
+  Speedup: 0.03x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.394573
+
+=== CPU 128x128 x 10 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 128x128
+Depth planes: 10
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:    6.222 ms | Median:    6.206 ms | P95:    6.348 ms | Throughput:   160.7 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    4.229 ms | Median:    4.024 ms | P95:    6.843 ms | Throughput:   236.4 ops/s
+  Speedup: 1.47x
+Threads:  4 | Mean:    2.605 ms | Median:    2.621 ms | P95:    2.894 ms | Throughput:   383.9 ops/s
+  Speedup: 2.39x
+Threads:  8 | Mean:    3.474 ms | Median:    3.481 ms | P95:    3.658 ms | Throughput:   287.9 ops/s
+  Speedup: 1.79x
+Threads: 16 | Mean:    2.644 ms | Median:    2.477 ms | P95:    5.671 ms | Throughput:   378.3 ops/s
+  Speedup: 2.35x
+Threads: 32 | Mean:    2.991 ms | Median:    2.589 ms | P95:    5.243 ms | Throughput:   334.3 ops/s
+  Speedup: 2.08x
+Threads: 64 | Mean:  153.900 ms | Median:  150.000 ms | P95:  180.001 ms | Throughput:     6.5 ops/s
+  Speedup: 0.04x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.400317
+
+=== CPU 128x128 x 20 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 128x128
+Depth planes: 20
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   12.170 ms | Median:   12.004 ms | P95:   12.959 ms | Throughput:    82.2 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   10.571 ms | Median:    7.527 ms | P95:   17.002 ms | Throughput:    94.6 ops/s
+  Speedup: 1.15x
+Threads:  4 | Mean:    5.440 ms | Median:    5.181 ms | P95:    8.440 ms | Throughput:   183.8 ops/s
+  Speedup: 2.24x
+Threads:  8 | Mean:    6.987 ms | Median:    6.841 ms | P95:    9.649 ms | Throughput:   143.1 ops/s
+  Speedup: 1.74x
+Threads: 16 | Mean:    4.822 ms | Median:    4.553 ms | P95:    7.618 ms | Throughput:   207.4 ops/s
+  Speedup: 2.52x
+Threads: 32 | Mean:    4.617 ms | Median:    4.331 ms | P95:    7.209 ms | Throughput:   216.6 ops/s
+  Speedup: 2.64x
+Threads: 64 | Mean:  204.821 ms | Median:  261.000 ms | P95:  334.000 ms | Throughput:     4.9 ops/s
+  Speedup: 0.06x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.406300
+
+=== CPU 256x256 x 1 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 256x256
+Depth planes: 1
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:    2.407 ms | Median:    2.390 ms | P95:    2.528 ms | Throughput:   415.4 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    1.601 ms | Median:    1.555 ms | P95:    2.459 ms | Throughput:   624.6 ops/s
+  Speedup: 1.50x
+Threads:  4 | Mean:    1.470 ms | Median:    1.168 ms | P95:    2.851 ms | Throughput:   680.3 ops/s
+  Speedup: 1.64x
+Threads:  8 | Mean:    1.760 ms | Median:    1.746 ms | P95:    1.922 ms | Throughput:   568.1 ops/s
+  Speedup: 1.37x
+Threads: 16 | Mean:    1.349 ms | Median:    1.340 ms | P95:    1.493 ms | Throughput:   741.6 ops/s
+  Speedup: 1.79x
+Threads: 32 | Mean:    1.369 ms | Median:    1.218 ms | P95:    3.945 ms | Throughput:   730.7 ops/s
+  Speedup: 1.76x
+Threads: 64 | Mean:   44.900 ms | Median:   44.006 ms | P95:   50.994 ms | Throughput:    22.3 ops/s
+  Speedup: 0.05x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.395749
+
+=== CPU 256x256 x 3 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 256x256
+Depth planes: 3
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:    7.307 ms | Median:    7.193 ms | P95:    8.816 ms | Throughput:   136.9 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    4.140 ms | Median:    4.153 ms | P95:    4.830 ms | Throughput:   241.6 ops/s
+  Speedup: 1.76x
+Threads:  4 | Mean:    5.165 ms | Median:    5.640 ms | P95:    5.799 ms | Throughput:   193.6 ops/s
+  Speedup: 1.41x
+Threads:  8 | Mean:    3.861 ms | Median:    3.779 ms | P95:    5.032 ms | Throughput:   259.0 ops/s
+  Speedup: 1.89x
+Threads: 16 | Mean:    2.859 ms | Median:    2.853 ms | P95:    2.912 ms | Throughput:   349.7 ops/s
+  Speedup: 2.56x
+Threads: 32 | Mean:    2.350 ms | Median:    2.275 ms | P95:    3.774 ms | Throughput:   425.5 ops/s
+  Speedup: 3.11x
+Threads: 64 | Mean:   66.350 ms | Median:   65.998 ms | P95:   78.006 ms | Throughput:    15.1 ops/s
+  Speedup: 0.11x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.397059
+
+=== CPU 256x256 x 5 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 256x256
+Depth planes: 5
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   11.947 ms | Median:   11.905 ms | P95:   12.610 ms | Throughput:    83.7 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    6.572 ms | Median:    6.483 ms | P95:    7.342 ms | Throughput:   152.2 ops/s
+  Speedup: 1.82x
+Threads:  4 | Mean:    4.600 ms | Median:    4.505 ms | P95:    7.157 ms | Throughput:   217.4 ops/s
+  Speedup: 2.60x
+Threads:  8 | Mean:    5.917 ms | Median:    5.719 ms | P95:    7.320 ms | Throughput:   169.0 ops/s
+  Speedup: 2.02x
+Threads: 16 | Mean:    4.469 ms | Median:    4.433 ms | P95:    5.497 ms | Throughput:   223.8 ops/s
+  Speedup: 2.67x
+Threads: 32 | Mean:    3.388 ms | Median:    3.349 ms | P95:    3.624 ms | Throughput:   295.1 ops/s
+  Speedup: 3.53x
+Threads: 64 | Mean:   64.200 ms | Median:   85.000 ms | P95:  117.002 ms | Throughput:    15.6 ops/s
+  Speedup: 0.19x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.395747
+
+=== CPU 256x256 x 10 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 256x256
+Depth planes: 10
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   24.551 ms | Median:   24.284 ms | P95:   26.239 ms | Throughput:    40.7 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   13.322 ms | Median:   13.239 ms | P95:   15.384 ms | Throughput:    75.1 ops/s
+  Speedup: 1.84x
+Threads:  4 | Mean:   10.130 ms | Median:    8.343 ms | P95:   16.699 ms | Throughput:    98.7 ops/s
+  Speedup: 2.42x
+Threads:  8 | Mean:   11.885 ms | Median:   11.602 ms | P95:   13.912 ms | Throughput:    84.1 ops/s
+  Speedup: 2.07x
+Threads: 16 | Mean:    8.768 ms | Median:    8.774 ms | P95:   10.141 ms | Throughput:   114.1 ops/s
+  Speedup: 2.80x
+Threads: 32 | Mean:    6.575 ms | Median:    6.390 ms | P95:   10.097 ms | Throughput:   152.1 ops/s
+  Speedup: 3.73x
+Threads: 64 | Mean:  162.783 ms | Median:  163.999 ms | P95:  190.020 ms | Throughput:     6.1 ops/s
+  Speedup: 0.15x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.394559
+
+=== CPU 256x256 x 20 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 256x256
+Depth planes: 20
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   49.178 ms | Median:   48.742 ms | P95:   51.744 ms | Throughput:    20.3 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   26.918 ms | Median:   26.794 ms | P95:   28.571 ms | Throughput:    37.1 ops/s
+  Speedup: 1.83x
+Threads:  4 | Mean:   19.098 ms | Median:   16.710 ms | P95:   33.650 ms | Throughput:    52.4 ops/s
+  Speedup: 2.58x
+Threads:  8 | Mean:   18.999 ms | Median:   18.416 ms | P95:   24.446 ms | Throughput:    52.6 ops/s
+  Speedup: 2.59x
+Threads: 16 | Mean:   16.555 ms | Median:   16.272 ms | P95:   18.828 ms | Throughput:    60.4 ops/s
+  Speedup: 2.97x
+Threads: 32 | Mean:   13.326 ms | Median:   12.808 ms | P95:   17.039 ms | Throughput:    75.0 ops/s
+  Speedup: 3.69x
+Threads: 64 | Mean:  298.003 ms | Median:  314.568 ms | P95:  348.001 ms | Throughput:     3.4 ops/s
+  Speedup: 0.17x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.396400
+
+=== CPU 512x512 x 1 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 512x512
+Depth planes: 1
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   13.831 ms | Median:   13.836 ms | P95:   15.509 ms | Throughput:    72.3 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:    6.969 ms | Median:    6.983 ms | P95:    7.425 ms | Throughput:   143.5 ops/s
+  Speedup: 1.98x
+Threads:  4 | Mean:    6.262 ms | Median:    5.744 ms | P95:    9.819 ms | Throughput:   159.7 ops/s
+  Speedup: 2.21x
+Threads:  8 | Mean:    4.719 ms | Median:    5.279 ms | P95:    5.453 ms | Throughput:   211.9 ops/s
+  Speedup: 2.93x
+Threads: 16 | Mean:    4.837 ms | Median:    4.816 ms | P95:    5.291 ms | Throughput:   206.7 ops/s
+  Speedup: 2.86x
+Threads: 32 | Mean:    3.998 ms | Median:    3.560 ms | P95:    6.591 ms | Throughput:   250.1 ops/s
+  Speedup: 3.46x
+Threads: 64 | Mean:   47.800 ms | Median:   47.997 ms | P95:   52.002 ms | Throughput:    20.9 ops/s
+  Speedup: 0.29x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.395846
+
+=== CPU 512x512 x 3 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 512x512
+Depth planes: 3
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   33.343 ms | Median:   33.113 ms | P95:   35.126 ms | Throughput:    30.0 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   18.331 ms | Median:   17.975 ms | P95:   22.772 ms | Throughput:    54.6 ops/s
+  Speedup: 1.82x
+Threads:  4 | Mean:   13.658 ms | Median:   12.175 ms | P95:   21.597 ms | Throughput:    73.2 ops/s
+  Speedup: 2.44x
+Threads:  8 | Mean:   13.316 ms | Median:   13.283 ms | P95:   14.605 ms | Throughput:    75.1 ops/s
+  Speedup: 2.50x
+Threads: 16 | Mean:   10.100 ms | Median:   10.211 ms | P95:   10.688 ms | Throughput:    99.0 ops/s
+  Speedup: 3.30x
+Threads: 32 | Mean:    8.494 ms | Median:    8.456 ms | P95:   10.075 ms | Throughput:   117.7 ops/s
+  Speedup: 3.93x
+Threads: 64 | Mean:   79.250 ms | Median:   79.999 ms | P95:   85.966 ms | Throughput:    12.6 ops/s
+  Speedup: 0.42x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.396912
+
+=== CPU 512x512 x 5 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 512x512
+Depth planes: 5
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   53.017 ms | Median:   52.587 ms | P95:   56.952 ms | Throughput:    18.9 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   28.835 ms | Median:   28.616 ms | P95:   30.961 ms | Throughput:    34.7 ops/s
+  Speedup: 1.84x
+Threads:  4 | Mean:   19.753 ms | Median:   17.361 ms | P95:   32.771 ms | Throughput:    50.6 ops/s
+  Speedup: 2.68x
+Threads:  8 | Mean:   20.646 ms | Median:   20.390 ms | P95:   22.361 ms | Throughput:    48.4 ops/s
+  Speedup: 2.57x
+Threads: 16 | Mean:   15.460 ms | Median:   15.520 ms | P95:   17.019 ms | Throughput:    64.7 ops/s
+  Speedup: 3.43x
+Threads: 32 | Mean:   13.139 ms | Median:   12.988 ms | P95:   16.767 ms | Throughput:    76.1 ops/s
+  Speedup: 4.04x
+Threads: 64 | Mean:  107.300 ms | Median:  110.000 ms | P95:  116.819 ms | Throughput:     9.3 ops/s
+  Speedup: 0.49x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.397553
+
+=== CPU 512x512 x 10 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 512x512
+Depth planes: 10
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:  106.151 ms | Median:  105.151 ms | P95:  114.299 ms | Throughput:     9.4 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   61.995 ms | Median:   59.741 ms | P95:   80.942 ms | Throughput:    16.1 ops/s
+  Speedup: 1.71x
+Threads:  4 | Mean:   40.922 ms | Median:   37.101 ms | P95:   61.554 ms | Throughput:    24.4 ops/s
+  Speedup: 2.59x
+Threads:  8 | Mean:   37.728 ms | Median:   37.617 ms | P95:   40.093 ms | Throughput:    26.5 ops/s
+  Speedup: 2.81x
+Threads: 16 | Mean:   24.265 ms | Median:   24.342 ms | P95:   26.983 ms | Throughput:    41.2 ops/s
+  Speedup: 4.37x
+Threads: 32 | Mean:   21.888 ms | Median:   21.928 ms | P95:   23.754 ms | Throughput:    45.7 ops/s
+  Speedup: 4.85x
+Threads: 64 | Mean:  143.826 ms | Median:  150.748 ms | P95:  184.505 ms | Throughput:     7.0 ops/s
+  Speedup: 0.74x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.397487
+
+=== CPU 512x512 x 20 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 512x512
+Depth planes: 20
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:  217.236 ms | Median:  215.949 ms | P95:  242.175 ms | Throughput:     4.6 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:  123.341 ms | Median:  116.842 ms | P95:  167.096 ms | Throughput:     8.1 ops/s
+  Speedup: 1.76x
+Threads:  4 | Mean:   73.993 ms | Median:   73.033 ms | P95:   91.016 ms | Throughput:    13.5 ops/s
+  Speedup: 2.94x
+Threads:  8 | Mean:   73.763 ms | Median:   74.775 ms | P95:   77.475 ms | Throughput:    13.6 ops/s
+  Speedup: 2.95x
+Threads: 16 | Mean:   57.977 ms | Median:   57.744 ms | P95:   62.106 ms | Throughput:    17.2 ops/s
+  Speedup: 3.75x
+Threads: 32 | Mean:   43.287 ms | Median:   43.992 ms | P95:   47.750 ms | Throughput:    23.1 ops/s
+  Speedup: 5.02x
+Threads: 64 | Mean:  328.201 ms | Median:  332.009 ms | P95:  408.798 ms | Throughput:     3.0 ops/s
+  Speedup: 0.66x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.395816
+
+=== CPU 1024x1024 x 1 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 1024x1024
+Depth planes: 1
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:   73.852 ms | Median:   73.026 ms | P95:   85.519 ms | Throughput:    13.5 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   41.134 ms | Median:   39.845 ms | P95:   58.832 ms | Throughput:    24.3 ops/s
+  Speedup: 1.80x
+Threads:  4 | Mean:   22.036 ms | Median:   20.449 ms | P95:   32.705 ms | Throughput:    45.4 ops/s
+  Speedup: 3.35x
+Threads:  8 | Mean:   15.287 ms | Median:   15.045 ms | P95:   21.978 ms | Throughput:    65.4 ops/s
+  Speedup: 4.83x
+Threads: 16 | Mean:   10.497 ms | Median:   10.522 ms | P95:   11.135 ms | Throughput:    95.3 ops/s
+  Speedup: 7.04x
+Threads: 32 | Mean:   10.020 ms | Median:   10.252 ms | P95:   10.931 ms | Throughput:    99.8 ops/s
+  Speedup: 7.37x
+Threads: 64 | Mean:   45.031 ms | Median:   50.000 ms | P95:   54.999 ms | Throughput:    22.2 ops/s
+  Speedup: 1.64x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.396045
+
+=== CPU 1024x1024 x 3 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 1024x1024
+Depth planes: 3
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:  158.313 ms | Median:  158.492 ms | P95:  163.830 ms | Throughput:     6.3 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:   86.009 ms | Median:   86.656 ms | P95:   93.450 ms | Throughput:    11.6 ops/s
+  Speedup: 1.84x
+Threads:  4 | Mean:   53.997 ms | Median:   50.944 ms | P95:   74.673 ms | Throughput:    18.5 ops/s
+  Speedup: 2.93x
+Threads:  8 | Mean:   38.636 ms | Median:   37.952 ms | P95:   47.740 ms | Throughput:    25.9 ops/s
+  Speedup: 4.10x
+Threads: 16 | Mean:   28.582 ms | Median:   28.337 ms | P95:   32.067 ms | Throughput:    35.0 ops/s
+  Speedup: 5.54x
+Threads: 32 | Mean:   24.812 ms | Median:   25.544 ms | P95:   26.707 ms | Throughput:    40.3 ops/s
+  Speedup: 6.38x
+Threads: 64 | Mean:   83.805 ms | Median:   86.995 ms | P95:   94.994 ms | Throughput:    11.9 ops/s
+  Speedup: 1.89x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.396046
+
+=== CPU 1024x1024 x 5 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 1024x1024
+Depth planes: 5
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:  255.403 ms | Median:  255.205 ms | P95:  268.008 ms | Throughput:     3.9 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:  141.908 ms | Median:  137.692 ms | P95:  185.760 ms | Throughput:     7.0 ops/s
+  Speedup: 1.80x
+Threads:  4 | Mean:   87.341 ms | Median:   85.540 ms | P95:  116.413 ms | Throughput:    11.4 ops/s
+  Speedup: 2.92x
+Threads:  8 | Mean:   57.999 ms | Median:   56.783 ms | P95:   71.198 ms | Throughput:    17.2 ops/s
+  Speedup: 4.40x
+Threads: 16 | Mean:   46.373 ms | Median:   46.149 ms | P95:   50.633 ms | Throughput:    21.6 ops/s
+  Speedup: 5.51x
+Threads: 32 | Mean:   36.915 ms | Median:   36.272 ms | P95:   41.699 ms | Throughput:    27.1 ops/s
+  Speedup: 6.92x
+Threads: 64 | Mean:  120.750 ms | Median:  122.785 ms | P95:  130.207 ms | Throughput:     8.3 ops/s
+  Speedup: 2.12x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.396364
+
+=== CPU 1024x1024 x 10 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 1024x1024
+Depth planes: 10
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean:  507.092 ms | Median:  505.482 ms | P95:  529.427 ms | Throughput:     2.0 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:  290.774 ms | Median:  284.232 ms | P95:  354.057 ms | Throughput:     3.4 ops/s
+  Speedup: 1.74x
+Threads:  4 | Mean:  195.729 ms | Median:  188.205 ms | P95:  245.221 ms | Throughput:     5.1 ops/s
+  Speedup: 2.59x
+Threads:  8 | Mean:  161.986 ms | Median:  162.075 ms | P95:  178.700 ms | Throughput:     6.2 ops/s
+  Speedup: 3.13x
+Threads: 16 | Mean:  116.964 ms | Median:  117.172 ms | P95:  126.640 ms | Throughput:     8.5 ops/s
+  Speedup: 4.34x
+Threads: 32 | Mean:  112.881 ms | Median:   89.848 ms | P95:  172.082 ms | Throughput:     8.9 ops/s
+  Speedup: 4.49x
+Threads: 64 | Mean:  238.356 ms | Median:  237.757 ms | P95:  250.626 ms | Throughput:     4.2 ops/s
+  Speedup: 2.13x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.397643
+
+=== CPU 1024x1024 x 20 planes (thread sweep) ===
+CPU (OpenMP + FFTW) Holographic Reconstruction Benchmark
+=========================================================
+Image size: 1024x1024
+Depth planes: 20
+Warmup: 5, Iterations: 20
+
+Thread Scaling Sweep:
+Threads    Mean (ms)    Median (ms)  P95 (ms)     Throughput   Speedup     
+Threads:  1 | Mean: 1028.815 ms | Median: 1026.318 ms | P95: 1074.235 ms | Throughput:     1.0 ops/s
+  Speedup: 1.00x
+Threads:  2 | Mean:  584.854 ms | Median:  577.312 ms | P95:  671.653 ms | Throughput:     1.7 ops/s
+  Speedup: 1.76x
+Threads:  4 | Mean:  386.872 ms | Median:  391.277 ms | P95:  427.825 ms | Throughput:     2.6 ops/s
+  Speedup: 2.66x
+Threads:  8 | Mean:  257.729 ms | Median:  254.899 ms | P95:  299.198 ms | Throughput:     3.9 ops/s
+  Speedup: 3.99x
+Threads: 16 | Mean:  198.809 ms | Median:  199.786 ms | P95:  210.933 ms | Throughput:     5.0 ops/s
+  Speedup: 5.17x
+Threads: 32 | Mean:  162.400 ms | Median:  163.856 ms | P95:  171.387 ms | Throughput:     6.2 ops/s
+  Speedup: 6.34x
+Threads: 64 | Mean:  438.300 ms | Median:  439.435 ms | P95:  448.062 ms | Throughput:     2.3 ops/s
+  Speedup: 2.35x
+
+Output sanity: Min=0.000000 Max=1.000000 Mean=0.397429
+
