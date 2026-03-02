@@ -178,13 +178,42 @@ The CPU roofline with in-core ceilings reveals why the OpenMP implementation pla
 
 ---
 
-## 12. Reconstruction Performance Summary
+## 12. Reconstruction Latency — C++ CUDA vs Python GPU Crossover
+
+![Reconstruction Latency All Implementations](12_recon_latency_all.png)
+
+A closer look at the reconstruction stage reveals a surprising crossover: **C++ CUDA is only faster than Python GPU at small image sizes**. At large sizes, Python GPU (PyTorch cuFFT) matches or slightly exceeds the C++ implementation:
+
+| Config | Python GPU (ms) | C++ CUDA (ms) | C++ Speedup |
+|---|---|---|---|
+| 128x128 x 1p | 0.28 | 0.09 | **3.1x** |
+| 256x256 x 5p | 0.30 | 0.12 | **2.5x** |
+| 512x512 x 5p | 0.33 | 0.32 | 1.0x |
+| 1024x1024 x 1p | 0.32 | 0.35 | 0.9x |
+| 1024x1024 x 5p | 0.59 | 1.03 | **0.6x** |
+| 1024x1024 x 20p | 3.25 | 3.49 | **0.9x** |
+
+**Why this happens:**
+
+1. **PyTorch's cuFFT path is highly optimized for large FFTs.** PyTorch calls cuFFT through a thin C++ layer with pre-tuned plan caching and workspace management. For large 2D FFTs (1024x1024), the cuFFT kernel execution dominates wall time and both implementations spend the same time inside the same library. The C++ wrapper overhead is negligible for large problems.
+
+2. **C++ implementation overhead is fixed-cost.** Our C++ reconstruction performs explicit `cudaMemcpy` D2D for padding, separate kernel launches for shift/normalize/crop, and `cudaStreamSynchronize` between stages. These fixed overheads (~0.05-0.1 ms) dominate at small sizes (where the FFT itself takes <0.1 ms) but become invisible at large sizes.
+
+3. **PyTorch avoids unnecessary synchronization.** PyTorch's internal CUDA stream management pipelines memory operations with compute, whereas our C++ implementation has explicit sync points between the padding, FFT, and cropping phases.
+
+4. **At 1024x1024 x 5+ planes, the C++ batched inverse FFT shows worse cache behavior.** The batched `cufftExecC2C` for many planes on large grids may exceed L2 capacity (96 MB for 20 planes x 1088x1088 x 8B = 179 MB), forcing GDDR7 round-trips. PyTorch processes planes with individual FFT calls that have better L2 residency.
+
+**Implication for optimization:** For the pipeline's operating point (448x448 x 3 planes), C++ CUDA reconstruction is 2.8x faster than Python GPU (0.145 ms vs 0.408 ms) — firmly in the regime where C++ wins. But scaling to larger images or more planes for autofocus (100-1000 planes) will require addressing the L2 cache spilling issue, potentially through tiled FFT decomposition or cuFFTDx kernel fusion.
+
+---
+
+## 13. Reconstruction Performance Summary
 
 ![Summary Table](11_summary_table.png)
 
 ---
 
-## 13. Current Status and Next Steps
+## 14. Current Status and Next Steps
 
 ### Completed (Weeks 1-6, ahead of schedule)
 - C++/CUDA holographic reconstruction with cuFFT, validated against Python reference
