@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSCI 8205 Milestone 1 Report</title>
+    <style>
+        body {
+            font-family: "Times New Roman", serif;
+            margin: 60px auto;
+            max-width: 900px;
+            line-height: 1.6;
+            color: #333;
+            background: white;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 5px;
+            margin-top: 40px;
+        }
+        h3 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        h4 {
+            color: #555;
+            margin-top: 25px;
+        }
+        .header-info {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .note {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            font-style: italic;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #bdc3c7;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #ecf0f1;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        code {
+            background-color: #f1c40f;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Courier New", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: "Courier New", monospace;
+        }
+        pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+        .figure {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .figure img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .figure-caption {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .summary-box {
+            background: #e8f6f3;
+            border: 1px solid #16a085;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .performance-highlight {
+            background: #fdf2e9;
+            border: 1px solid #f39c12;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .performance-highlight h1:first-child,
+        .performance-highlight h2:first-child,
+        .performance-highlight h3:first-child,
+        .performance-highlight h4:first-child,
+        .performance-highlight p:first-child,
+        .performance-highlight ul:first-child,
+        .performance-highlight ol:first-child {
+            margin-top: 0;
+        }
+        .performance-highlight h1:last-child,
+        .performance-highlight h2:last-child,
+        .performance-highlight h3:last-child,
+        .performance-highlight h4:last-child,
+        .performance-highlight p:last-child,
+        .performance-highlight ul:last-child,
+        .performance-highlight ol:last-child {
+            margin-bottom: 0;
+        }
+        .summary-box h1:first-child,
+        .summary-box h2:first-child,
+        .summary-box h3:first-child,
+        .summary-box h4:first-child,
+        .summary-box p:first-child,
+        .summary-box ul:first-child,
+        .summary-box ol:first-child {
+            margin-top: 0;
+        }
+        .summary-box h1:last-child,
+        .summary-box h2:last-child,
+        .summary-box h3:last-child,
+        .summary-box h4:last-child,
+        .summary-box p:last-child,
+        .summary-box ul:last-child,
+        .summary-box ol:last-child {
+            margin-bottom: 0;
+        }
+        .note h1:first-child,
+        .note h2:first-child,
+        .note h3:first-child,
+        .note h4:first-child,
+        .note p:first-child,
+        .note ul:first-child,
+        .note ol:first-child {
+            margin-top: 0;
+        }
+        .note h1:last-child,
+        .note h2:last-child,
+        .note h3:last-child,
+        .note h4:last-child,
+        .note p:last-child,
+        .note ul:last-child,
+        .note ol:last-child {
+            margin-bottom: 0;
+        }
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .section-break {
+            margin: 50px 0;
+            border-top: 1px solid #bdc3c7;
+            padding-top: 30px;
+        }
+        strong {
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+
+<h1>CSCI 8205 Milestone 1 Report</h1>
+
+<div class="header-info">
+    <h2 style="border: none; margin-top: 0;">Multi-GPU Pipeline Architecture for Real-Time Digital Inline Holographic Reconstruction</h2>
+    <p><strong>Course:</strong> CSCI 8205: Design and Implementation of Multiprocessor Systems<br>
+    <strong>Students:</strong> Nicholas Bravo-Frank (bravo095@umn.edu), Anlei Chen (chen8264@umn.edu)<br>
+    <strong>Date:</strong> March 5, 2026<br>
+    <strong>Reporting Period:</strong> February 11 - March 5, 2026 (Weeks 1-4, with extensions into Weeks 5-6)</p>
+</div>
+
+<div class="note">
+    <strong>Note:</strong> This document was formatted and edited using Claude Sonnet 4 (claude-sonnet-4-20250514). Code examples, figure organization, and technical analysis were refactored and validated using Claude assistance.
+</div>
+
+<div class="section-break">
+<h2>Summary</h2>
+
+<div class="summary-box">
+<p>This milestone report documents progress on developing a parallel (multi-GPU) pipeline architecture for real-time digital inline holographic reconstruction. We have exceeded our original Week 1-4 timeline targets and completed work planned through Week 6, achieving a <strong>7.8× end-to-end performance improvement</strong> over our Python baseline with the C++ TensorRT implementation (6.3 ms vs 49.3 ms per frame).</p>
+</div>
+
+<h3>Progress</h3>
+<ul>
+    <li><strong>C++/CUDA reconstruction kernel</strong> completed and validated against Python reference</li>
+    <li><strong>Full 6-stage pipeline implementation</strong> in C++ with native TensorRT integration</li>
+    <li><strong>Comprehensive benchmarking framework</strong> using 10,000 frames of experimental data (1440×1080 grayscale images)</li>
+    <li><strong>Multi-architecture comparison</strong>: Python CPU/GPU vs C++ CPU/GPU implementations</li>
+    <li><strong>Roofline analysis</strong> with bandwidth ceilings and in-core performance limits</li>
+    <li><strong>OpenMP CPU baseline</strong> with thread scaling analysis (1-64 cores)</li>
+</ul>
+
+<div class="performance-highlight">
+<h3>Key Performance Results</h3>
+<ul>
+    <li><strong>End-to-end latency:</strong> 6.3 ms (158 FPS) sustained over 10,000 frames</li>
+    <li><strong>Real-time target:</strong> 67% progress toward 400 Hz camera target (2.5 ms/frame)</li>
+    <li><strong>Stage-level improvements:</strong> Up to 56.8× speedup in holographic reconstruction</li>
+    <li><strong>Implementation robustness:</strong> P95/median latency ratio of only 1.08× (excellent predictability)</li>
+</ul>
+</div>
+
+<div class="figure">
+    <img src="01_e2e_latency.png" alt="End-to-End Pipeline Performance" width="80%">
+    <p class="figure-caption"><strong>Figure 1:</strong> End-to-end pipeline performance comparison across implementations</p>
+</div>
+
+</div>
+
+<div class="section-break">
+<h2>1. Project Background and Objectives</h2>
+
+<h3>1.1 Problem Statement</h3>
+
+<p>Digital inline holography (DIH) reconstructs three-dimensional particle fields from two-dimensional interference patterns through a six-stage computational pipeline:</p>
+
+<ol>
+    <li><strong>Image Load & Transfer</strong> (~1 ms) - Disk read, resize, host-to-device transfer; synthetic camera read to RAM and move to GPU from buffer</li>
+    <li><strong>EMA Background Subtraction</strong> (~3 ms) - Exponential moving average enhancement</li>
+    <li><strong>Multi-plane Reconstruction</strong> (~1 ms/plane) - Angular spectrum propagation via 2D FFT (outperforms fresnel propagation on GPU)</li>
+    <li><strong>ML-based Particle Detection</strong> (~3-4 ms) - CNN heatmap generation (batch=32, model developed previously and not part of this work)</li>
+    <li><strong>ML Classification</strong> (~1 ms) - Per-particle crop classification (batch=32, YoloV21 classifier model, also not part of this work)</li>
+    <li><strong>Post-processing</strong> (~1-10 ms) - Temporal consistency filtering</li>
+</ol>
+
+<p>The challenge is designing a parallel workflow and multi-GPU system that can (1) sustain the core pipeline at maximum throughput while (2) concurrently processing computationally expensive autofocus workloads (10-100× slower than individual pipeline stages) without stalling frame ingestion.</p>
+
+<h3>1.2 Original Schedule and Targets</h3>
+
+<p>Per our proposal, <strong>Week 1-4 objectives</strong> were:</p>
+<ul>
+    <li>Port angular spectrum propagation to C++/CUDA with cuFFT</li>
+    <li>Implement OpenMP CPU baseline with FFTW (1-32 cores)</li>
+    <li>Validate implementations against Python reference</li>
+    <li>Initial roofline analysis characterizing compute vs memory-bound regimes</li>
+    <li><strong>Deliverable:</strong> Validated reconstruction kernels with initial roofline plots</li>
+</ul>
+
+<h3>1.3 Hardware Platform</h3>
+
+<ul>
+    <li><strong>GPU:</strong> NVIDIA RTX 5090 (Blackwell, 170 SMs, 105 TFLOPS FP32, 1790 GB/s GDDR7, 32GB VRAM)</li>
+    <li><strong>CPU:</strong> AMD Threadripper PRO 7975WX (32 cores, Zen 4, 150 GB/s DDR5)</li>
+    <li><strong>Development environment:</strong> Ubuntu 24.04, CUDA 13.1, PyTorch 2.10.0+cu130</li>
+</ul>
+
+</div>
+
+<div class="section-break">
+<h2>2. Implementation Progress</h2>
+
+<h3>2.1 Completed Software Components</h3>
+
+<h4>2.1.1 C++/CUDA Holographic Reconstruction</h4>
+<ul>
+    <li><strong>Location:</strong> <code>cpp_cuda/src/holographic_reconstruction.cu</code></li>
+    <li><strong>Features:</strong>
+        <ul>
+            <li>cuFFT-based 2D FFT with batched inverse transforms</li>
+            <li>Hz_stack caching optimization (compute forward FFT once, reuse across depth planes)</li>
+            <li>Fused normalization and cropping kernels</li>
+            <li>GPU memory pooling for zero-allocation operation</li>
+        </ul>
+    </li>
+    <li><strong>Validation:</strong> Verified against Python reference across 20 configurations (4 image sizes × 5 depth counts)</li>
+    <li><strong>Performance:</strong> 2.8× faster than PyTorch GPU at pipeline operating point (448×448, 3 planes)</li>
+</ul>
+
+<h4>2.1.2 OpenMP CPU Baseline</h4>
+<ul>
+    <li><strong>Location:</strong> <code>cpp_cuda/src/cpu_baseline.cpp</code></li>
+    <li><strong>Implementation:</strong> FFTW3 with OpenMP parallelization</li>
+    <li><strong>Thread scaling:</strong> Tested 1, 2, 4, 8, 16, 32, 64 threads</li>
+    <li><strong>Key finding:</strong> NUMA topology limits scaling - performance collapses at 64 threads due to cross-CCD cache coherence thrashing (best guess, need to validate)</li>
+</ul>
+
+<h4>2.1.3 Complete 6-Stage C++ Pipeline</h4>
+<ul>
+    <li><strong>Location:</strong> <code>cpp_cuda/src/pipeline.cu</code>, <code>cpp_cuda/src/benchmark_pipeline.cu</code></li>
+    <li><strong>Integration:</strong> Native TensorRT C++ API (not torch2trt wrapper)</li>
+    <li><strong>ML Models:</strong>
+        <ul>
+            <li>Heatmap detection: MobileNetV3-Small + FPN</li>
+            <li>Classification: YOLO11n-cls</li>
+        </ul>
+    </li>
+    <li><strong>Memory management:</strong> Pre-allocated GPU buffers (~80MB total), zero runtime allocation</li>
+</ul>
+
+<h4>2.1.4 Benchmarking Framework</h4>
+<ul>
+    <li><strong>Coverage:</strong> 4 implementations × 240+ configurations per implementation</li>
+    <li><strong>Statistical robustness:</strong> 10,000-frame sustained runs for C++ TensorRT</li>
+    <li><strong>Metrics:</strong> Per-stage latency (mean/median/P95/P99), throughput, memory utilization</li>
+    <li><strong>Cross-validation:</strong> Automated numerical validation across all implementations</li>
+</ul>
+
+<h3>2.2 Performance Analysis Infrastructure</h3>
+
+<h4>2.2.1 Extended Roofline Model</h4>
+<ul>
+    <li><strong>Multi-level bandwidth ceilings:</strong> L1/Shared (~12 TB/s), L2 (~6 TB/s), GDDR7 (1790 GB/s)</li>
+    <li><strong>In-core computation ceilings:</strong> Peak FP32 (105 TF), No FMA (52.5 TF), Typical cuFFT (31.5 TF)</li>
+    <li><strong>Locality analysis:</strong> L1→L2 and L2→GDDR7 transition points for working set analysis</li>
+</ul>
+
+<h4>2.2.2 Cross-Implementation Validation</h4>
+<ul>
+    <li><strong>Numerical accuracy:</strong> CUDA ↔ OpenMP < 1e-5, C++ ↔ Python < 1e-2</li>
+    <li><strong>Performance correlation:</strong> Consistent scaling trends across 4+ orders of magnitude problem size</li>
+    <li><strong>Automated testing:</strong> 20+ configuration validation suite with configurable tolerances</li>
+</ul>
+
+</div>
+
+<div class="section-break">
+<h2>3. Key Results and Findings</h2>
+
+<h3>3.1 End-to-End Performance Achievements</h3>
+
+<table>
+    <tr>
+        <th>Implementation</th>
+        <th>Mean (ms)</th>
+        <th>Median (ms)</th>
+        <th>P95 (ms)</th>
+        <th>FPS</th>
+        <th>vs CPU Baseline</th>
+    </tr>
+    <tr>
+        <td>Python CPU</td>
+        <td>49.3</td>
+        <td>48.6</td>
+        <td>67.7</td>
+        <td>20</td>
+        <td>1.0×</td>
+    </tr>
+    <tr>
+        <td>Python PyTorch GPU</td>
+        <td>18.7</td>
+        <td>16.4</td>
+        <td>31.2</td>
+        <td>53</td>
+        <td>2.6×</td>
+    </tr>
+    <tr>
+        <td>Python TensorRT</td>
+        <td>14.8</td>
+        <td>13.1</td>
+        <td>25.0</td>
+        <td>67</td>
+        <td>3.3×</td>
+    </tr>
+    <tr style="background-color: #e8f6f3;">
+        <td><strong>C++ TensorRT</strong></td>
+        <td><strong>6.3</strong></td>
+        <td><strong>6.4</strong></td>
+        <td><strong>6.9</strong></td>
+        <td><strong>158</strong></td>
+        <td><strong>7.8×</strong></td>
+    </tr>
+</table>
+
+<p><strong>Notes:</strong> The C++ TensorRT pipeline demonstrates high latency predictability (P95/median = 1.08×) compared to Python TensorRT (P95/median = 1.91×), essential for real-time applications and workloads.</p>
+
+<div class="figure">
+    <img src="02_stage_breakdown.png" alt="Stage-by-Stage Performance Breakdown" width="80%">
+    <p class="figure-caption"><strong>Figure 2:</strong> Pipeline stage performance breakdown showing bottleneck transformation</p>
+</div>
+
+<h3>3.2 Stage-by-Stage Performance Analysis</h3>
+
+<h4>3.2.1 C++ vs Python TensorRT Direct Comparison</h4>
+
+<table>
+    <tr>
+        <th>Stage</th>
+        <th>Python TRT</th>
+        <th>C++ TRT</th>
+        <th>Speedup</th>
+        <th>Primary Cause</th>
+    </tr>
+    <tr>
+        <td>Image Load</td>
+        <td>5.19 ms</td>
+        <td>4.22 ms</td>
+        <td>1.2×</td>
+        <td>Pinned memory vs cv2 default</td>
+    </tr>
+    <tr style="background-color: #fdf2e9;">
+        <td>EMA</td>
+        <td>0.256 ms</td>
+        <td>0.007 ms</td>
+        <td><strong>38.2×</strong></td>
+        <td>Fused CUDA kernel vs PyTorch ops</td>
+    </tr>
+    <tr>
+        <td>Reconstruction</td>
+        <td>0.408 ms</td>
+        <td>0.145 ms</td>
+        <td>2.8×</td>
+        <td>Hz_stack caching, fused kernels</td>
+    </tr>
+    <tr>
+        <td>Detection</td>
+        <td>1.287 ms</td>
+        <td>0.457 ms</td>
+        <td>2.8×</td>
+        <td>Native TRT API vs torch2trt wrapper</td>
+    </tr>
+    <tr style="background-color: #fdf2e9;">
+        <td>Classification</td>
+        <td>7.478 ms</td>
+        <td>1.447 ms</td>
+        <td><strong>5.2×</strong></td>
+        <td>Direct TRT vs ultralytics overhead</td>
+    </tr>
+    <tr style="background-color: #fdf2e9;">
+        <td>Post-processing</td>
+        <td>0.218 ms</td>
+        <td>0.016 ms</td>
+        <td><strong>13.9×</strong></td>
+        <td>C++ std::vector vs Python lists</td>
+    </tr>
+</table>
+
+<p><strong>Notes:</strong> Largest speedups result from eliminating Python/framework overhead rather than algorithmic improvements.</p>
+
+<div class="figure">
+    <img src="03_cpp_vs_python_trt.png" alt="C++ vs Python TensorRT Direct Comparison" width="80%">
+    <p class="figure-caption"><strong>Figure 3:</strong> Direct comparison between C++ and Python TensorRT implementations</p>
+</div>
+
+<h4>3.2.2 Compute Architecture Comparison</h4>
+
+<p><strong>Per-stage speedup over Python CPU baseline:</strong></p>
+<ul>
+    <li><strong>Holographic Reconstruction:</strong> 56.8× (FFT-dominated, <em>easily</em> parallelized)</li>
+    <li><strong>EMA Background:</strong> 49.2× (Memory bandwidth bound, ideal for GPU)</li>
+    <li><strong>Heatmap Detection:</strong> 26.6× (CNN inference highly parallel)</li>
+    <li><strong>Classification:</strong> 15.6× (Limited by variable batch size 0-50 crops/frame)</li>
+    <li><strong>Image Load:</strong> 1.4× (Disk I/O bound, GPU cannot accelerate but there may be a clever way to load from real/simulated camera stream)</li>
+</ul>
+
+<div class="figure">
+    <img src="04_speedup_over_cpu.png" alt="Per-Stage Speedup Over CPU Baseline" width="80%">
+    <p class="figure-caption"><strong>Figure 4:</strong> Per-stage speedup analysis revealing compute characteristics</p>
+</div>
+
+<h3>3.3 Roofline Analysis Results</h3>
+
+<h4>3.3.1 GPU Pipeline Stages on Extended Roofline</h4>
+
+<table>
+    <tr>
+        <th>Stage</th>
+        <th>AI (FLOP/byte)</th>
+        <th>Achieved</th>
+        <th>% of Roofline</th>
+        <th>Performance Regime</th>
+    </tr>
+    <tr>
+        <td>Load & H2D</td>
+        <td>0.2</td>
+        <td>0.05 GF/s</td>
+        <td>0%</td>
+        <td>I/O bound (disk bottleneck)</td>
+    </tr>
+    <tr style="background-color: #e8f6f3;">
+        <td>EMA</td>
+        <td>0.6</td>
+        <td>258 GF/s</td>
+        <td>26%</td>
+        <td><strong>Memory bandwidth bound</strong></td>
+    </tr>
+    <tr>
+        <td>Reconstruction</td>
+        <td>10.0</td>
+        <td>1,085 GF/s</td>
+        <td>6%</td>
+        <td>Below cuFFT ceiling</td>
+    </tr>
+    <tr style="background-color: #fdeaea;">
+        <td>Heatmap (TRT)</td>
+        <td>104</td>
+        <td>1,313 GF/s</td>
+        <td>1.3%</td>
+        <td>Compute bound, under-utilized</td>
+    </tr>
+    <tr style="background-color: #fdeaea;">
+        <td>Classification (TRT)</td>
+        <td>202</td>
+        <td>1,866 GF/s</td>
+        <td>1.8%</td>
+        <td>Compute bound, batch overhead</td>
+    </tr>
+    <tr>
+        <td>Post-processing</td>
+        <td>0.2</td>
+        <td>0.4 GF/s</td>
+        <td>0%</td>
+        <td>CPU scalar operation</td>
+    </tr>
+</table>
+
+<p><strong>Notes:</strong> EMA is the only stage operating efficiently relative to its roofline position (26%). TensorRT stages have high arithmetic intensity (>100 FLOP/byte) but achieve only 1-2% of theoretical peak, indicating significant GPU under-utilization that motivates concurrent execution via CUDA streams.</p>
+
+<div class="figure">
+    <img src="08_gpu_roofline_extended.png" alt="GPU Extended Roofline Analysis" width="80%">
+    <p class="figure-caption"><strong>Figure 5:</strong> Extended GPU roofline analysis with multi-level bandwidth ceilings</p>
+</div>
+
+<div class="figure">
+    <img src="09_pipeline_roofline.png" alt="Pipeline Stages on GPU Roofline" width="80%">
+    <p class="figure-caption"><strong>Figure 6:</strong> Individual pipeline stages plotted on GPU roofline model</p>
+</div>
+
+<h4>3.3.2 CPU OpenMP Thread Scaling</h4>
+
+<p><strong>Scaling efficiency on Threadripper PRO 7975WX:</strong></p>
+<ul>
+    <li><strong>Small problems (128×128):</strong> Poor scaling due to overhead, best performance at 32 threads with only 1.3-2.6× speedup</li>
+    <li><strong>Large problems (1024×1024):</strong> Better scaling up to 7.4× with 32 threads (1 plane), 6.3× (20 planes)</li>
+    <li><strong>64 threads:</strong> Performance collapse due to NUMA effects across 4 CCDs</li>
+</ul>
+
+<p><strong>Root cause:</strong> Memory bandwidth saturation at ~150 GB/s DDR5 combined with 2D FFT's poor cache line utilization during strided column-pass operations.</p>
+
+<div class="figure">
+    <img src="06_openmp_scaling.png" alt="OpenMP Thread Scaling Analysis" width="80%">
+    <p class="figure-caption"><strong>Figure 7:</strong> OpenMP thread scaling efficiency on Threadripper NUMA topology</p>
+</div>
+
+<div class="figure">
+    <img src="10_cpu_roofline_extended.png" alt="CPU Extended Roofline Analysis" width="80%">
+    <p class="figure-caption"><strong>Figure 8:</strong> CPU roofline analysis revealing memory bandwidth saturation</p>
+</div>
+
+<h3>3.4 Architectural Insights</h3>
+
+<h4>3.4.1 Reconstruction Size Scaling Crossover</h4>
+<p>C++ CUDA is only faster than Python GPU at small image sizes.</p>
+
+<table>
+    <tr>
+        <th>Configuration</th>
+        <th>Python GPU (ms)</th>
+        <th>C++ CUDA (ms)</th>
+        <th>C++ Advantage</th>
+    </tr>
+    <tr style="background-color: #e8f6f3;">
+        <td>128×128 × 1p</td>
+        <td>0.28</td>
+        <td>0.09</td>
+        <td><strong>3.1×</strong></td>
+    </tr>
+    <tr>
+        <td>512×512 × 5p</td>
+        <td>0.33</td>
+        <td>0.32</td>
+        <td>1.0×</td>
+    </tr>
+    <tr style="background-color: #fdeaea;">
+        <td>1024×1024 × 20p</td>
+        <td>3.25</td>
+        <td>3.49</td>
+        <td><strong>0.9× (slower)</strong></td>
+    </tr>
+</table>
+
+<p><strong>Possible Explanation:</strong> PyTorch's cuFFT path is highly optimized for large FFTs with better stream management and L2 cache utilization. C++ implementation's explicit synchronization and batched operations show worse cache behavior at large sizes.</p>
+
+<p><strong>Pipeline relevance:</strong> At the operating point (448×448 × 3 planes), C++ maintains a 2.8× advantage, but autofocus workloads (100-1000 planes) may require L2-aware tiling strategies.</p>
+
+<div class="figure">
+    <img src="05_recon_scaling.png" alt="Reconstruction Scaling Analysis" width="80%">
+    <p class="figure-caption"><strong>Figure 9:</strong> Holographic reconstruction latency scaling with problem size</p>
+</div>
+
+<div class="figure">
+    <img src="07_cuda_latency_heatmap.png" alt="CUDA Latency Heatmap" width="80%">
+    <p class="figure-caption"><strong>Figure 10:</strong> CUDA reconstruction latency heatmap across image sizes and depth counts</p>
+</div>
+
+<div class="figure">
+    <img src="12_recon_latency_all.png" alt="Reconstruction Latency Crossover Analysis" width="80%">
+    <p class="figure-caption"><strong>Figure 11:</strong> C++ vs Python GPU reconstruction performance crossover analysis</p>
+</div>
+
+<h4>3.4.2 Pipeline Bottleneck Transformation</h4>
+<ul>
+    <li><strong>Python CPU:</strong> Compute-bound, classification dominates (22.5 ms, 46% of end-to-end)</li>
+    <li><strong>C++ TensorRT:</strong> I/O-bound, image loading dominates (4.2 ms, 67% of end-to-end)</li>
+    <li><strong>GPU compute stages:</strong> Total 2.07 ms, suggesting ~480 FPS achievable with preloaded frames</li>
+</ul>
+
+</div>
+
+<div class="section-break">
+<h2>4. Schedule and Deviations</h2>
+
+<h3>4.1 Progress vs Original Timeline</h3>
+
+<p><strong>Originally planned for Weeks 1-4:</strong></p>
+<ul>
+    <li>C++/CUDA reconstruction (completed Week 2)</li>
+    <li>OpenMP CPU baseline (completed Week 3)</li>
+    <li>Roofline analysis (completed Week 4)</li>
+    <li>Validation against Python (completed Week 2)</li>
+</ul>
+
+<p><strong>Additional work completed:</strong></p>
+<ul>
+    <li>Complete 6-stage C++ pipeline (originally Week 5-8)</li>
+    <li>Native TensorRT integration (originally Week 5-6)</li>
+    <li>Cross-implementation benchmarking (originally Week 7-8)</li>
+</ul>
+
+<h3>4.2 Updated Schedule</h3>
+
+<div class="performance-highlight">
+<p><strong>Week 7-8: Single-GPU Ring Buffer Pipeline</strong><br>
+Focus shifts to inter-stage communication and asynchronous subsystem design. Ring buffer implementation becomes critical due to I/O bottleneck identification.</p>
+
+<p><strong>Week 9-10: Kernel Fusion and Real-time Validation</strong><br>
+Final optimization phase focused on cuFFTDx integration and 400 Hz feasibility.</p>
+
+<p><strong>Week 11-12: Multi-GPU Partitioning</strong><br>
+To simplify the project, multi-GPU stage grouping moved to end to focus on robust benchmarking of single GPU performance.</p>
+</div>
+
+</div>
+
+<div class="section-break">
+<h2>5. Technical Details</h2>
+
+<h3>5.1 Software Implementation Details</h3>
+
+<h4>5.1.1 C++ CUDA Reconstruction Optimizations</h4>
+
+<p><strong>Hz_stack Caching Strategy:</strong></p>
+<pre><code>// Forward FFT computed once, cached for all depth planes
+cufftExecC2C(fft_plan_forward, image_freq, Hz_stack, CUFFT_FORWARD);
+
+// Reuse Hz_stack for each depth plane reconstruction
+for (int d = 0; d < num_depths; d++) {
+    element_wise_multiply_kernel<<<grid, block>>>(
+        Hz_stack, depth_kernels + d * freq_size, temp_freq);
+    cufftExecC2C(fft_plan_inverse, temp_freq, temp_spatial, CUFFT_INVERSE);
+    fused_normalize_crop_kernel<<<grid, block>>>(
+        temp_spatial, output + d * spatial_size);
+}</code></pre>
+
+<p><strong>Performance impact:</strong> Reduces FFT operations from O(D+1) to O(1) for D depth planes.</p>
+
+<h4>5.1.2 EMA Fused CUDA Kernel</h4>
+
+<p><strong>Python PyTorch (0.256 ms):</strong></p>
+<pre><code># Multiple kernel launches, Python dispatch overhead
+background = alpha * current + (1 - alpha) * background  # Launch 1
+difference = torch.abs(current - background)             # Launch 2
+enhanced = torch.clamp(difference * gain, 0, 1)         # Launch 3</code></pre>
+
+<p><strong>C++ CUDA (0.007 ms, 38× speedup):</strong></p>
+<pre><code>__global__ void ema_kernel(float* current, float* background,
+                          float* output, float alpha, float gain, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        background[idx] = alpha * current[idx] + (1-alpha) * background[idx];
+        float diff = fabsf(current[idx] - background[idx]);
+        output[idx] = fminf(diff * gain, 1.0f);
+    }
+}</code></pre>
+
+<h4>5.1.3 Native TensorRT C++ API Integration</h4>
+
+<p><strong>Advantages over torch2trt wrapper:</strong></p>
+<ul>
+    <li>Direct <code>enqueueV3()</code> calls without Python overhead</li>
+    <li>Explicit CUDA stream management for pipelining</li>
+    <li>Pre-allocated device buffers with zero-copy operation</li>
+    <li>Optimized input preprocessing (resize, normalize) in CUDA</li>
+</ul>
+
+<h3>5.2 Benchmarking</h3>
+
+<h4>5.2.1 Statistical Robustness</h4>
+<ul>
+    <li><strong>Warmup:</strong> 100 iterations to stabilize GPU clocks and caches</li>
+    <li><strong>Sample size:</strong> 10,000 iterations for C++ (statistical power), 1,000 for Python (may be why we see larger P95)</li>
+    <li><strong>Outlier handling:</strong> Winsorization at P99.9 to remove OS jitter</li>
+    <li><strong>Memory pressure:</strong> Pre-allocation to avoid dynamic allocation during timing</li>
+</ul>
+
+<h4>5.2.2 Cross-Validation Protocol</h4>
+<pre><code>float tolerance_cuda_openmp = 1e-5f;  // Same algorithm
+float tolerance_cpp_python = 1e-2f;   // Different FFT libraries</code></pre>
+
+<h3>5.3 Hardware Performance</h3>
+
+<h4>5.3.1 RTX 5090 Blackwell Architecture Utilization</h4>
+<ul>
+    <li><strong>Peak compute:</strong> 105 TFLOPS FP32 theoretical, ~31.5 TFLOPS cuFFT practical ceiling</li>
+    <li><strong>Memory bandwidth:</strong> 1790 GB/s theoretical, ~1200 GB/s achieved in EMA kernel (67% efficiency)</li>
+    <li><strong>VRAM utilization:</strong> 80MB pipeline buffers / 32GB capacity (0.25% utilization)</li>
+</ul>
+
+<h4>5.3.2 Threadripper NUMA Topology Analysis</h4>
+<ul>
+    <li><strong>4 CCDs</strong> (Core Complex Dies): 8 cores each, separate L3 cache domains</li>
+    <li><strong>Cross-CCD penalties:</strong> 2× latency for remote L3 access, coherence traffic on infinity fabric (design working sets to stay within local CCD L3 cache)</li>
+    <li><strong>Optimal threading:</strong> 32 threads (8 per CCD) to avoid cross-CCD communication</li>
+</ul>
+
+</div>
+
+</div>
+
+<div class="section-break">
+<h2>6. Next Steps</h2>
+
+<h3>6.1 Single-GPU Ring Buffer Pipeline (Week 7-8)</h3>
+
+<p><strong>Motivation:</strong> Two optimization opportunities identified:</p>
+<ol>
+    <li><strong>I/O bottleneck:</strong> Disk loading consumes 67% of end-to-end latency (4.2 ms of 6.3 ms)</li>
+    <li><strong>GPU under-utilization:</strong> TensorRT stages achieve only 1-2% of theoretical peak, indicating potential for concurrent execution</li>
+</ol>
+
+<p><strong>Ring buffer architecture for all 6 pipeline stages:</strong></p>
+
+<pre><code>template&lt;typename T&gt;
+class PipelineRingBuffer {
+    struct StageBuffer {
+        T* device_memory;              // Pre-allocated GPU buffers
+        cudaEvent_t completion_event;  // Inter-stage synchronization
+        cudaStream_t stream;           // Dedicated CUDA stream per stage
+        volatile int status;           // 0=empty, 1=processing, 2=ready
+    };
+
+    StageBuffer buffers[NUM_STAGES][RING_DEPTH];
+    alignas(64) volatile int stage_heads[NUM_STAGES];  // Cache-line aligned
+    alignas(64) volatile int stage_tails[NUM_STAGES];
+    // Lock-free SPSC between adjacent stages
+};</code></pre>
+
+<p><strong>Stage-specific ring buffer design:</strong></p>
+
+<table>
+    <tr>
+        <th>Stage</th>
+        <th>Buffer Type</th>
+        <th>Ring Depth</th>
+        <th>Synchronization</th>
+    </tr>
+    <tr>
+        <td>1. Image Load</td>
+        <td>Host→Device pinned</td>
+        <td>8 frames</td>
+        <td>Async H2D transfer</td>
+    </tr>
+    <tr>
+        <td>2. EMA</td>
+        <td>Device float32</td>
+        <td>4 frames</td>
+        <td>CUDA event</td>
+    </tr>
+    <tr>
+        <td>3. Reconstruction</td>
+        <td>Device complex64</td>
+        <td>4 frames</td>
+        <td>cuFFT stream</td>
+    </tr>
+    <tr>
+        <td>4. Detection</td>
+        <td>Device float32</td>
+        <td>4 frames</td>
+        <td>TensorRT execution context</td>
+    </tr>
+    <tr>
+        <td>5. Classification</td>
+        <td>Device float32 crops</td>
+        <td>Variable</td>
+        <td>Dynamic batching</td>
+    </tr>
+    <tr>
+        <td>6. Post-processing</td>
+        <td>Host result structs</td>
+        <td>2 frames</td>
+        <td>Async D2H transfer</td>
+    </tr>
+</table>
+
+<div class="performance-highlight">
+<h4>Implementation Priorities</h4>
+<ol>
+    <li><strong>Lock-free SPSC queues</strong> with cache-line alignment to minimize coherence overhead</li>
+    <li><strong>GPU memory pool allocator</strong> for zero runtime allocation across all stages</li>
+    <li><strong>CUDA stream synchronization</strong> using events rather than synchronous barriers</li>
+    <li><strong>Dynamic frame batching</strong> for classification stage (0-50 crops per frame)</li>
+</ol>
+
+<p><strong>Expected performance impact:</strong></p>
+<ul>
+    <li><strong>I/O decoupling:</strong> Eliminate 4.2 ms loading bottleneck → ~2.1 ms compute-only latency</li>
+    <li><strong>Concurrent execution:</strong> TensorRT stages run in parallel via streams → additional 30-50% improvement</li>
+    <li><strong>Target:</strong> Sub-2 ms end-to-end latency (~500+ FPS), exceeding 400 Hz requirement</li>
+</ul>
+</div>
+
+<h3>6.2 Kernel Fusion and Real-time Validation (Week 9-10)</h3>
+
+<p><strong>cuFFTDx integration for reconstruction stage:</strong></p>
+<ul>
+    <li><strong>Motivation:</strong> Reconstruction operates at only 6% of cuFFT ceiling, room for 2-3× improvement</li>
+    <li><strong>Implementation:</strong> Fuse forward FFT + element-wise multiply + inverse FFT into single kernel</li>
+    <li><strong>Impact:</strong> Critical for autofocus workloads (100-1000 planes) and removes reconstruction from bottleneck analysis</li>
+</ul>
+
+<p><strong>TensorRT stream optimization:</strong></p>
+<ul>
+    <li><strong>Multi-context execution:</strong> Separate TensorRT execution contexts for detection/classification</li>
+    <li><strong>Custom preprocessing plugins:</strong> Fused resize+normalize+transfer operations</li>
+    <li><strong>Dynamic batching:</strong> Adaptive batch sizes based on detection count per frame</li>
+</ul>
+
+<p><strong>Real-time validation framework:</strong></p>
+<ul>
+    <li><strong>Synthetic camera source:</strong> 400 Hz frame generation to eliminate disk I/O variability</li>
+    <li><strong>Thermal characterization:</strong> 1-hour sustained runs to measure performance under thermal throttling</li>
+    <li><strong>Worst-case analysis:</strong> P99.9 latency measurements for real-time guarantees</li>
+    <li><strong>Jitter analysis:</strong> Frame-to-frame latency variance to characterize temporal predictability</li>
+</ul>
+
+<h3>6.3 Multi-GPU Stage Partitioning (Week 11-12)</h3>
+
+<p><strong>Stage grouping strategies</strong> (deferred to focus on single-GPU optimization first):</p>
+
+<ol>
+    <li><strong>Pipeline parallelism:</strong> Different stages on different GPUs with inter-GPU ring buffers</li>
+    <li><strong>Data parallelism:</strong> Split frame batches across GPUs for stages with sufficient parallelism</li>
+    <li><strong>Hybrid approach:</strong> Core pipeline on GPU 0, autofocus workload distributed across GPUs 1-3</li>
+</ol>
+
+<p><strong>Implementation approach:</strong></p>
+<ul>
+    <li><strong>NCCL communication:</strong> Efficient inter-GPU transfers for large frame data</li>
+    <li><strong>CUDA peer-to-peer:</strong> Direct GPU-to-GPU memory access where supported</li>
+    <li><strong>Load balancing:</strong> Dynamic work distribution based on per-GPU utilization</li>
+</ul>
+
+<p><strong>Evaluation metrics:</strong></p>
+<ul>
+    <li><strong>Strong scaling efficiency:</strong> Speedup vs number of GPUs (target >80% up to 4 GPUs)</li>
+    <li><strong>Load balance:</strong> Per-GPU utilization variance (<10% imbalance)</li>
+    <li><strong>Communication overhead:</strong> Inter-GPU transfer time vs compute time ratio</li>
+</ul>
+
+<h3>6.4 Success Metrics and Validation</h3>
+
+<div class="performance-highlight">
+<p><strong>Performance targets:</strong></p>
+<ul>
+    <li><strong>400 Hz sustained:</strong> <2.5 ms average latency over 1-hour benchmark</li>
+    <li><strong>Real-time predictability:</strong> P99/P50 latency ratio <1.5×</li>
+    <li><strong>Thermal stability:</strong> <5% performance degradation under sustained load</li>
+</ul>
+
+<p><strong>Validation methodology:</strong></p>
+<ul>
+    <li><strong>Numerical accuracy:</strong> Maintain <1e-4 error vs single-threaded reference</li>
+    <li><strong>Resource utilization:</strong> >70% GPU compute utilization during steady-state operation</li>
+    <li><strong>Scaling validation:</strong> Linear throughput scaling with frame rate up to hardware limits</li>
+</ul>
+</div>
+
+</div>
+
+<div class="section-break">
+<h2>7. Conclusions and Impact</h2>
+
+<h3>7.1 Technical Achievements</h3>
+<ol>
+    <li><strong>Performance milestone:</strong> 7.8× end-to-end speedup demonstrates feasibility of real-time holographic processing</li>
+    <li><strong>Architectural insight:</strong> Pipeline transformed from compute-bound to I/O-bound, redirecting optimization focus</li>
+    <li><strong>Predictability:</strong> C++ implementation achieves 1.08× P95/median ratio, critical for real-time systems</li>
+    <li><strong>Scalability foundation:</strong> Extended roofline analysis provides optimization roadmap for each pipeline stage</li>
+</ol>
+
+<h3>7.2 Research Contributions</h3>
+<ol>
+    <li><strong>Cross-implementation validation:</strong> Establishes numerical accuracy bounds across Python/C++, CPU/GPU architectures</li>
+    <li><strong>Holographic workload characterization:</strong> Comprehensive roofline analysis of DIH pipeline stages</li>
+    <li><strong>Multi-level performance modeling:</strong> Extended roofline with bandwidth ceilings and in-core limits</li>
+    <li><strong>NUMA-aware optimization:</strong> Threadripper scaling analysis provides guidelines for CPU-intensive stages</li>
+</ol>
+
+<h3>7.3 Project Timeline Success</h3>
+
+<div class="summary-box">
+<p><strong>Schedule adherence:</strong> 3-4 weeks ahead of original proposal timeline while maintaining quality and rigor.</p>
+
+<p><strong>Risk mitigation:</strong> Early completion of core components provides schedule buffer for more ambitious multi-GPU and kernel fusion work.</p>
+
+<p><strong>Scope expansion:</strong> Ahead-of-schedule progress enables investigation of cuFFTDx kernel fusion originally planned for final weeks.</p>
+</div>
+
+<div class="figure">
+    <img src="11_summary_table.png" alt="Performance Summary Table" width="80%">
+    <p class="figure-caption"><strong>Figure 12:</strong> Comprehensive performance summary across all implementations</p>
+</div>
+
+</div>
+
+<div class="section-break">
+<h2>Appendix A: Software Architecture</h2>
+
+<h3>A.1 Implementation Structure</h3>
+<pre><code>cpp_cuda/
+├── include/
+│   ├── holographic_reconstruction.h    # Core reconstruction API
+│   ├── pipeline_stages.h               # Per-stage interfaces
+│   ├── pipeline.h                      # End-to-end pipeline
+│   └── tensorrt_engine.h               # TensorRT wrapper
+├── src/
+│   ├── holographic_reconstruction.cu   # CUDA reconstruction
+│   ├── cpu_baseline.cpp               # OpenMP baseline
+│   ├── pipeline.cu                     # Full pipeline
+│   ├── ema_stage.cu                   # Background subtraction
+│   ├── tensorrt_engine.cu             # TensorRT integration
+│   └── benchmark_*.cu                 # Performance testing
+└── tests/
+    └── test_reconstruction.cpp         # Validation suite</code></pre>
+
+<h3>A.2 Key Dependencies</h3>
+<ul>
+    <li><strong>CUDA:</strong> 13.0+ (cuFFT, cuBLAS, NVTX)</li>
+    <li><strong>TensorRT:</strong> 10.0+ (C++ API, engine serialization)</li>
+    <li><strong>OpenMP:</strong> 4.5+ (thread parallelism, NUMA affinity)</li>
+    <li><strong>FFTW:</strong> 3.3+ (CPU baseline, wisdom caching)</li>
+    <li><strong>Build system:</strong> CMake 3.20+, pybind11 for Python integration</li>
+</ul>
+
+</div>
+
+<div class="section-break">
+<h2>Appendix B: Benchmark Results Summary</h2>
+
+<h3>B.1 End-to-End Performance Matrix</h3>
+
+<table>
+    <tr>
+        <th>Implementation</th>
+        <th>Frames</th>
+        <th>Mean (ms)</th>
+        <th>Std (ms)</th>
+        <th>P50 (ms)</th>
+        <th>P95 (ms)</th>
+        <th>P99 (ms)</th>
+        <th>FPS</th>
+    </tr>
+    <tr>
+        <td>Python CPU</td>
+        <td>95</td>
+        <td>49.31</td>
+        <td>11.02</td>
+        <td>48.60</td>
+        <td>67.71</td>
+        <td>76.85</td>
+        <td>20.3</td>
+    </tr>
+    <tr>
+        <td>Python PyTorch GPU</td>
+        <td>9995</td>
+        <td>18.68</td>
+        <td>5.84</td>
+        <td>16.43</td>
+        <td>31.24</td>
+        <td>34.71</td>
+        <td>53.5</td>
+    </tr>
+    <tr>
+        <td>Python TensorRT</td>
+        <td>9995</td>
+        <td>14.76</td>
+        <td>6.12</td>
+        <td>13.07</td>
+        <td>24.98</td>
+        <td>28.45</td>
+        <td>67.7</td>
+    </tr>
+    <tr style="background-color: #e8f6f3;">
+        <td><strong>C++ TensorRT</strong></td>
+        <td>9995</td>
+        <td><strong>6.29</strong></td>
+        <td>0.32</td>
+        <td>6.39</td>
+        <td>6.88</td>
+        <td>7.04</td>
+        <td><strong>158.9</strong></td>
+    </tr>
+</table>
+
+<h3>B.2 Memory Utilization</h3>
+
+<table>
+    <tr>
+        <th>Implementation</th>
+        <th>Peak GPU Memory</th>
+        <th>CPU Memory</th>
+        <th>Efficiency</th>
+    </tr>
+    <tr>
+        <td>Python PyTorch</td>
+        <td>130.0 MB</td>
+        <td>2.1 GB</td>
+        <td>Low (Python overhead)</td>
+    </tr>
+    <tr>
+        <td>Python TensorRT</td>
+        <td>89.5 MB</td>
+        <td>1.8 GB</td>
+        <td>Medium (TRT optimized)</td>
+    </tr>
+    <tr style="background-color: #e8f6f3;">
+        <td><strong>C++ TensorRT</strong></td>
+        <td>80.2 MB</td>
+        <td>245 MB</td>
+        <td><strong>High</strong> (minimal overhead)</td>
+    </tr>
+</table>
+
+</div>
+
+</body>
+</html>

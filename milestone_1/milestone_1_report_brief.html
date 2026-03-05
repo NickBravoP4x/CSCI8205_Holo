@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSCI 8205 Milestone 1 Brief Report</title>
+    <style>
+        body {
+            font-family: "Times New Roman", serif;
+            margin: 40px auto;
+            max-width: 750px;
+            line-height: 1.5;
+            color: #333;
+            background: white;
+        }
+        /* PDF-optimized spacing */
+        @media print {
+            body {
+                margin: 0.5in;
+                max-width: none;
+            }
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 5px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            page-break-after: avoid;
+        }
+        .header-info {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .highlight-box {
+            background: #e8f6f3;
+            border: 1px solid #16a085;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .performance-box {
+            background: #fdf2e9;
+            border: 1px solid #f39c12;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #bdc3c7;
+            padding: 8px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        th {
+            background-color: #ecf0f1;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .figure {
+            text-align: center;
+            margin: 20px 0;
+            page-break-inside: avoid;
+        }
+        .figure img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .figure-caption {
+            margin-top: 8px;
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 0.95em;
+        }
+        strong {
+            color: #2c3e50;
+        }
+        .note {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 10px;
+            margin: 15px 0;
+            font-style: italic;
+            font-size: 0.9em;
+        }
+        /* Remove margins from first/last elements in boxes */
+        .highlight-box p:first-child,
+        .performance-box p:first-child {
+            margin-top: 0;
+        }
+        .highlight-box p:last-child,
+        .performance-box p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Remove headers and footers */
+        @page {
+            margin: 0.5in;
+            size: letter;
+        }
+
+        /* Hide any auto-generated content */
+        @media print {
+            body::before,
+            body::after,
+            html::before,
+            html::after {
+                display: none !important;
+            }
+        }
+
+        /* PDF page break optimization */
+        .highlight-box,
+        .performance-box {
+            page-break-inside: avoid;
+            margin: 15px 0;
+        }
+
+        .header-info {
+            page-break-after: avoid;
+            margin-bottom: 20px;
+        }
+
+        table {
+            page-break-inside: avoid;
+        }
+
+        p {
+            margin: 12px 0;
+            orphans: 3;
+            widows: 3;
+        }
+
+        h1 {
+            page-break-after: avoid;
+            margin-bottom: 20px;
+        }
+
+        /* Tighter spacing for print */
+        @media print {
+            .figure {
+                margin: 15px 0;
+            }
+            .highlight-box,
+            .performance-box {
+                margin: 10px 0;
+                padding: 12px;
+            }
+            h2 {
+                margin-top: 20px;
+                margin-bottom: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<h1>CSCI 8205 Milestone 1 Brief Report</h1>
+
+<div class="header-info">
+    <h2 style="border: none; margin-top: 0; font-size: 1.2em;">Multi-GPU Pipeline Architecture for Real-Time Digital Inline Holographic Reconstruction</h2>
+    <p><strong>Students:</strong> Nicholas Bravo-Frank, Anlei Chen<br>
+    <strong>Course:</strong> CSCI 8205: Design and Implementation of Multiprocessor Systems<br>
+    <strong>Date:</strong> March 5, 2026 | <strong>Period:</strong> Weeks 1-4 (completed through Week 6)</p>
+</div>
+
+<div class="note">
+    <strong>Note:</strong> This document was formatted using Claude Sonnet 4. Full technical details available in complete milestone report.
+</div>
+
+<h2>Key Achievements</h2>
+
+<p><strong>Technical Accomplishments:</strong> We successfully implemented and validated a complete 6-stage holographic processing pipeline in C++ with native TensorRT integration, achieving performance improvements across all stages. The pipeline includes image loading, background subtraction, holographic reconstruction via 2D FFT, CNN-based particle detection, ML classification, and post-processing.</p>
+
+<div class="figure">
+    <img src="01_e2e_latency.png" alt="End-to-End Pipeline Performance" width="90%">
+    <p class="figure-caption"><strong>Figure 1:</strong> End-to-end performance: C++ TensorRT achieves 7.8× speedup with superior predictability</p>
+</div>
+
+<p><strong>Performance Analysis:</strong> Our benchmarking revealed that the largest speedups come from eliminating Python/framework overhead rather than algorithmic improvements. The EMA stage shows a 38.2× improvement through kernel fusion, while the classification stage achieves 5.2× speedup by bypassing ultralytics overhead and using direct TensorRT calls.</p>
+
+<div class="figure">
+    <img src="03_cpp_vs_python_trt.png" alt="C++ vs Python TensorRT Comparison" width="90%">
+    <p class="figure-caption"><strong>Figure 2:</strong> Per-stage performance comparison revealing framework overhead elimination</p>
+</div>
+
+<h2>Performance Results</h2>
+
+
+<table>
+    <tr>
+        <th>Implementation</th>
+        <th>Latency (ms)</th>
+        <th>FPS</th>
+        <th>Speedup</th>
+        <th>Predictability</th>
+    </tr>
+    <tr>
+        <td>Python CPU</td>
+        <td>49.3</td>
+        <td>20</td>
+        <td>1.0×</td>
+        <td>P95/P50 = 1.39×</td>
+    </tr>
+    <tr>
+        <td>Python TensorRT</td>
+        <td>14.8</td>
+        <td>67</td>
+        <td>3.3×</td>
+        <td>P95/P50 = 1.91×</td>
+    </tr>
+    <tr style="background-color: #e8f6f3;">
+        <td><strong>C++ TensorRT</strong></td>
+        <td><strong>6.3</strong></td>
+        <td><strong>158</strong></td>
+        <td><strong>7.8×</strong></td>
+        <td><strong>P95/P50 = 1.08×</strong></td>
+    </tr>
+</table>
+
+
+<p><strong>Architectural Insights:</strong> Extended roofline analysis revealed that TensorRT stages achieve only 1-2% of theoretical GPU peak performance, indicating significant potential for concurrent execution via CUDA streams. The pipeline transformed from compute-bound (Python) to I/O-bound (C++), with disk loading now consuming 67% of end-to-end latency.</p>
+
+<div class="figure">
+    <img src="09_pipeline_roofline.png" alt="Pipeline Roofline Analysis" width="90%">
+    <p class="figure-caption"><strong>Figure 3:</strong> Pipeline stages on GPU roofline showing optimization opportunities</p>
+</div>
+
+<h2>Schedule Progress</h2>
+
+<p><strong>Ahead of Schedule:</strong> We completed our original Week 1-4 objectives by Week 2-3 and advanced into work planned for Weeks 5-8, including full pipeline implementation and comprehensive benchmarking. This positions us well for ambitious ring buffer and multi-GPU work in the remaining weeks.</p>
+
+<p><strong>Next Phase (Week 7-8):</strong> Ring buffer implementation for all 6 pipeline stages to eliminate I/O bottleneck and enable concurrent execution. Expected outcome: sub-2ms end-to-end latency (~500 FPS), exceeding the 400 Hz camera target.</p>
+
+<h2>Technical Impact</h2>
+
+<p><strong>Research Contributions:</strong> This work provides a roofline analysis of our digital inline holographic processing pipelines, establishes cross-implementation validation protocols across Python/C++ and CPU/GPU architectures, and demonstrates the feasibility of real-time holographic particle detection at camera-limited framerates.</p>
+
+<div class="figure">
+    <img src="11_summary_table.png" alt="Performance Summary" width="90%">
+    <p class="figure-caption"><strong>Figure 4:</strong> Comprehensive performance summary across all implementations and configurations</p>
+</div>
+
+<p><strong>Conclusion:</strong> The 7.8× performance improvement demonstrates significant progress toward real-time holographic processing. The current pipeline implementation has achieved substantial optimization gains, with further improvements requiring parallelism strategies. Our next step involves implementing ring buffers and refined memory management for each of the 6 stages to push performance closer to hardware saturation. We are well positioned to meet the 400 Hz target and advance to multi-GPU scaling challenges in the project's final phase.</p>
+
+</body>
+</html>
